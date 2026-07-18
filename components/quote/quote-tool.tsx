@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react"
 import {
+  billableGutterLength,
   measureRoof,
   type MaterialId,
   type RoofMeasurement,
 } from "@/lib/roof-quote"
 import { useCompanyConfig } from "@/components/company-config-provider"
 import { enabledProducts } from "@/lib/company-config"
+import { configFingerprint, recordAddressTest } from "@/lib/publish-workflow"
 import { Stepper } from "./stepper"
 import { AddressStep } from "./address-step"
 import { ConfirmStep } from "./confirm-step"
@@ -37,8 +39,10 @@ const STAGE_TO_STEP: Record<Stage, number> = {
 }
 
 export function QuoteTool({
+  contractorPreview = false,
   onEstimateGeneratedChange,
 }: {
+  contractorPreview?: boolean
   onEstimateGeneratedChange?: (generated: boolean) => void
 }) {
   const config = useCompanyConfig()
@@ -77,8 +81,31 @@ export function QuoteTool({
     if (result.status === "ok") {
       setMeasurement(result.measurement)
       setStories(result.measurement.stories ?? 1)
-      setStage("lead")
+      if (contractorPreview) {
+        recordAddressTest({
+          address,
+          status: "automatic",
+          successful: true,
+          measurementSource: result.measurement.source,
+          gutterLength: billableGutterLength(result.measurement),
+          configFingerprint: configFingerprint(config),
+        })
+        const recommended = materials.find((material) => material.badge)?.id ?? materials[0]?.id
+        if (recommended) setSelectedId(recommended)
+        setContact({ name: "Contractor test", email: "preview@example.com", phone: "5555555555" })
+        setStage("materials")
+      } else {
+        setStage("lead")
+      }
     } else {
+      if (contractorPreview) {
+        recordAddressTest({
+          address,
+          status: result.status === "out-of-area" ? "out-of-area" : "unavailable",
+          successful: false,
+          configFingerprint: configFingerprint(config),
+        })
+      }
       setUnavailableReason(result.status)
       setStage("unavailable")
     }
@@ -133,7 +160,22 @@ export function QuoteTool({
           onManualEstimate={(m) => {
             setMeasurement(m)
             setStories(m.stories ?? 1)
-            setStage("lead")
+            if (contractorPreview) {
+              recordAddressTest({
+                address,
+                status: "manual",
+                successful: true,
+                measurementSource: m.source,
+                gutterLength: billableGutterLength(m),
+                configFingerprint: configFingerprint(config),
+              })
+              const recommended = materials.find((material) => material.badge)?.id ?? materials[0]?.id
+              if (recommended) setSelectedId(recommended)
+              setContact({ name: "Contractor test", email: "preview@example.com", phone: "5555555555" })
+              setStage("materials")
+            } else {
+              setStage("lead")
+            }
           }}
         />
       )}

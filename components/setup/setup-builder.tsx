@@ -14,6 +14,9 @@ import {
   Globe2,
   LoaderCircle,
   ExternalLink,
+  Eye,
+  FlaskConical,
+  GitBranch,
   MapPinned,
   Palette,
   Plus,
@@ -22,6 +25,7 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from "lucide-react"
 import { BrandMark } from "@/components/brand-mark"
 import {
@@ -36,16 +40,27 @@ import {
   ThemePalette,
   ThemeSource,
 } from "@/lib/company-config"
+import {
+  configFingerprint,
+  EMPTY_PUBLISH_WORKFLOW,
+  isApprovalCurrent,
+  loadPublishWorkflow,
+  REQUIRED_SUCCESSFUL_ADDRESS_TESTS,
+  savePublishWorkflow,
+  successfulAddressTests,
+  type PublishWorkflowState,
+} from "@/lib/publish-workflow"
 
 const steps = [
   { title: "Company", subtitle: "Brand & contact", icon: Building2 },
   { title: "Service area", subtitle: "Counties you cover", icon: MapPinned },
   { title: "Products", subtitle: "Systems & pricing", icon: CircleDollarSign },
-  { title: "Publish", subtitle: "Review & launch", icon: Sparkles },
+  { title: "Test & publish", subtitle: "Verify & generate", icon: Sparkles },
 ]
 
 type DeploymentResponse = {
-  project: { id: string; name: string; created: boolean }
+  repository: { name: string; fullName: string; url: string; private: boolean }
+  project: { id: string; name: string }
   deployment: { id: string; url: string; readyState: string; inspectorUrl: string }
   domain: {
     name: string
@@ -70,6 +85,9 @@ export function SetupBuilder() {
   const [activeStep, setActiveStep] = useState(0)
   const [customCounty, setCustomCounty] = useState("")
   const [saved, setSaved] = useState(false)
+  const [workflow, setWorkflow] = useState<PublishWorkflowState>(EMPTY_PUBLISH_WORKFLOW)
+  const [repositoryName, setRepositoryName] = useState(`${projectSlug(DEFAULT_CONFIG.companyName)}-instant-quote`)
+  const [repositoryPrivate, setRepositoryPrivate] = useState(true)
   const [vercelProject, setVercelProject] = useState(projectSlug(DEFAULT_CONFIG.companyName))
   const [customDomain, setCustomDomain] = useState("")
   const [deployKey, setDeployKey] = useState("")
@@ -80,8 +98,24 @@ export function SetupBuilder() {
 
   useEffect(() => {
     const loaded = loadCompanyConfig()
+    const loadedWorkflow = loadPublishWorkflow()
     setConfig(loaded)
     setVercelProject(projectSlug(loaded.companyName))
+    setRepositoryName(`${projectSlug(loaded.companyName)}-instant-quote`)
+    setWorkflow(loadedWorkflow)
+    setSaved(isApprovalCurrent(loadedWorkflow, loaded))
+  }, [])
+
+  useEffect(() => {
+    const refreshWorkflow = () => setWorkflow(loadPublishWorkflow())
+    window.addEventListener("storage", refreshWorkflow)
+    window.addEventListener("focus", refreshWorkflow)
+    window.addEventListener("gutterquote-workflow-updated", refreshWorkflow)
+    return () => {
+      window.removeEventListener("storage", refreshWorkflow)
+      window.removeEventListener("focus", refreshWorkflow)
+      window.removeEventListener("gutterquote-workflow-updated", refreshWorkflow)
+    }
   }, [])
 
   const update = <K extends keyof CompanyConfig>(key: K, value: CompanyConfig[K]) => {
@@ -176,21 +210,65 @@ export function SetupBuilder() {
     () => config.gutterProducts.filter((product) => product.enabled),
     [config.gutterProducts],
   )
+  const currentConfigFingerprint = configFingerprint(config)
+  const successfulTests = useMemo(
+    () => successfulAddressTests(workflow, currentConfigFingerprint),
+    [currentConfigFingerprint, workflow],
+  )
+  const approvalCurrent = isApprovalCurrent(workflow, config)
+  const testingComplete = successfulTests.length >= REQUIRED_SUCCESSFUL_ADDRESS_TESTS
 
   const publish = () => {
     saveCompanyConfig(config)
     setSaved(true)
-    setVercelProject((current) => current || projectSlug(config.companyName))
+    const slug = projectSlug(config.companyName)
+    setVercelProject(slug)
+    setRepositoryName(`${slug}-instant-quote`)
     setActiveStep(3)
   }
 
-  const deployToVercel = async () => {
+  const approveConfiguration = () => {
+    if (!testingComplete) return
+    const nextWorkflow: PublishWorkflowState = {
+      ...workflow,
+      approval: {
+        approvedAt: new Date().toISOString(),
+        companyName: config.companyName,
+        configFingerprint: configFingerprint(config),
+        successfulTestIds: successfulTests.map((test) => test.id),
+      },
+    }
+    saveCompanyConfig(config)
+    savePublishWorkflow(nextWorkflow)
+    setWorkflow(nextWorkflow)
+  }
+
+  const clearAddressTests = () => {
+    const nextWorkflow = { addressTests: [], approval: null }
+    savePublishWorkflow(nextWorkflow)
+    setWorkflow(nextWorkflow)
+    setDeployment(null)
+  }
+
+  const resetDemo = () => {
+    saveCompanyConfig(DEFAULT_CONFIG)
+    savePublishWorkflow(EMPTY_PUBLISH_WORKFLOW)
+    setConfig(DEFAULT_CONFIG)
+    setWorkflow(EMPTY_PUBLISH_WORKFLOW)
+    setSaved(false)
+    setDeployment(null)
+    setDeployError("")
+    setRepositoryName(`${projectSlug(DEFAULT_CONFIG.companyName)}-instant-quote`)
+    setVercelProject(projectSlug(DEFAULT_CONFIG.companyName))
+  }
+
+  const publishCompanySite = async () => {
     setDeploying(true)
     setDeployError("")
     setDeployment(null)
 
     try {
-      const response = await fetch("/api/vercel/deploy", {
+      const response = await fetch("/api/publish", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -198,15 +276,19 @@ export function SetupBuilder() {
         },
         body: JSON.stringify({
           config,
+          approval: workflow.approval,
+          addressTests: workflow.addressTests,
+          repositoryName,
+          repositoryPrivate,
           projectName: vercelProject,
           domain: customDomain,
         }),
       })
       const result = (await response.json()) as DeploymentResponse & { error?: string }
-      if (!response.ok) throw new Error(result.error || "Vercel could not start the deployment.")
+      if (!response.ok) throw new Error(result.error || "The approved company site could not be published.")
       setDeployment(result)
     } catch (error) {
-      setDeployError(error instanceof Error ? error.message : "Vercel could not start the deployment.")
+      setDeployError(error instanceof Error ? error.message : "The approved company site could not be published.")
     } finally {
       setDeploying(false)
     }
@@ -232,7 +314,7 @@ export function SetupBuilder() {
         <nav className="setup-steps" aria-label="Setup progress">
           {steps.map((step, index) => {
             const Icon = step.icon
-            const complete = index < activeStep || (index === 3 && saved)
+            const complete = index < activeStep || (index === 3 && approvalCurrent)
             return (
               <button
                 key={step.title}
@@ -259,7 +341,7 @@ export function SetupBuilder() {
         <header className="setup-topbar">
           <div className="mobile-product">GutterQuote <b>Studio</b></div>
           <div className="setup-topbar__status"><span /> Draft saved locally</div>
-          <Link href="/" className="text-link">View quote site <ExternalLink size={15} /></Link>
+          <Link href="/?preview=contractor" target="_blank" className="text-link" onClick={publish}>Test completed site <ExternalLink size={15} /></Link>
         </header>
 
         <div className="setup-canvas">
@@ -459,13 +541,10 @@ export function SetupBuilder() {
 
             {activeStep === 3 && (
               <SetupSection
-                eyebrow="04 · Review & publish"
-                title={saved ? "Your site is ready to launch." : "Everything look right?"}
-                description={saved ? "Your configuration is saved. Create its Vercel project and connect a domain below." : "Review your company profile, coverage, and pricing before publishing."}
+                eyebrow="04 · Test, approve & publish"
+                title={approvalCurrent ? "Approved and ready to generate." : saved ? "Preview the finished site and verify it." : "Everything look right?"}
+                description={approvalCurrent ? "The approved configuration can now become its own GitHub repository and Vercel project." : saved ? `Run at least ${REQUIRED_SUCCESSFUL_ADDRESS_TESTS} addresses through the full customer experience before approval.` : "Review the company profile, coverage, and pricing before starting contractor testing."}
               >
-                {saved && (
-                  <div className="published-banner"><CheckCircle2 size={25} /><div><b>Configuration ready</b><p>The customer quote site is ready for a production deployment.</p></div></div>
-                )}
                 <div className="review-grid">
                   <ReviewCard label="Company" action={() => setActiveStep(0)}>
                     <BrandMark name={config.companyName || "Your Company"} logo={config.logo} />
@@ -485,14 +564,69 @@ export function SetupBuilder() {
                 </div>
 
                 {saved && (
+                  <section className="workflow-card">
+                    <div className="workflow-card__header">
+                      <span><FlaskConical size={19} /></span>
+                      <div><b>Full-site address testing</b><p>Test mode uses the completed customer page but never sends leads or tracking events.</p></div>
+                      <strong>{successfulTests.length}/{REQUIRED_SUCCESSFUL_ADDRESS_TESTS}</strong>
+                    </div>
+                    <div className="workflow-progress"><i style={{ width: `${Math.min(100, (successfulTests.length / REQUIRED_SUCCESSFUL_ADDRESS_TESTS) * 100)}%` }} /></div>
+                    <div className="workflow-actions">
+                      <Link href="/?preview=contractor" target="_blank" className="primary-button"><Eye size={16} /> Open completed site in test mode</Link>
+                      {workflow.addressTests.length > 0 && <button type="button" className="secondary-button" onClick={clearAddressTests}><Trash2 size={15} /> Clear tests</button>}
+                    </div>
+                    <div className="test-address-list">
+                      {workflow.addressTests.length === 0 ? (
+                        <p className="empty-tests">No test addresses yet. Open test mode and complete an estimate to record the result here.</p>
+                      ) : workflow.addressTests.map((test) => {
+                        const currentTest = test.configFingerprint === currentConfigFingerprint
+                        return (
+                          <div key={test.id} className={!currentTest ? "is-stale" : test.successful ? "is-success" : "is-warning"}>
+                            <span>{test.successful && currentTest ? <CheckCircle2 size={16} /> : <MapPinned size={16} />}</span>
+                            <div><b>{test.address}</b><small>{!currentTest ? "Previous configuration · retest required" : test.status === "automatic" ? `${test.gutterLength?.toLocaleString() ?? "—"} ft · ${test.measurementSource ?? "automatic measurement"}` : test.status === "manual" ? `${test.gutterLength?.toLocaleString() ?? "—"} ft · manual fallback verified` : test.status === "out-of-area" ? "Outside service area behavior verified" : "Automatic measurement unavailable"}</small></div>
+                            <time>{new Date(test.testedAt).toLocaleDateString()}</time>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {saved && (
+                  <section className={`approval-card ${approvalCurrent ? "is-approved" : ""}`}>
+                    <div>
+                      <span>{approvalCurrent ? <CheckCircle2 size={20} /> : <ShieldCheck size={20} />}</span>
+                      <div>
+                        <b>{approvalCurrent ? "Contractor approval recorded" : "Approve this white-label site"}</b>
+                        <p>{approvalCurrent ? `Approved ${new Date(workflow.approval!.approvedAt).toLocaleString()}. Any pricing or branding edit requires a new approval.` : testingComplete ? "The address-testing requirement is complete. Review the summary and approve this exact configuration." : `${REQUIRED_SUCCESSFUL_ADDRESS_TESTS - successfulTests.length} more successful address test${REQUIRED_SUCCESSFUL_ADDRESS_TESTS - successfulTests.length === 1 ? "" : "s"} required.`}</p>
+                      </div>
+                    </div>
+                    {!approvalCurrent && <button type="button" className="primary-button" disabled={!testingComplete} onClick={approveConfiguration}><ShieldCheck size={16} /> Approve configuration</button>}
+                  </section>
+                )}
+
+                {workflow.approval && !approvalCurrent && (
+                  <div className="deployment-error">The configuration changed after approval. Save, retest if necessary, and approve the updated version before publishing.</div>
+                )}
+
+                {approvalCurrent && (
                   <section className="vercel-deploy-card">
                     <div className="vercel-deploy-card__header">
-                      <span><Rocket size={19} /></span>
-                      <div><b>Deploy a company site</b><p>Create or update its Vercel project, then attach the domain.</p></div>
-                      <i>VERCEL</i>
+                      <span><GitBranch size={19} /></span>
+                      <div><b>Generate the approved company site</b><p>Create its independent GitHub repository first, then connect that repository to a new Vercel project.</p></div>
+                      <i>GITHUB → VERCEL</i>
                     </div>
 
                     <div className="deployment-fields">
+                      <Field label="Customer repository name" hint="A new repository created from the approved template.">
+                        <input value={repositoryName} onChange={(event) => setRepositoryName(projectSlug(event.target.value))} placeholder="company-instant-quote" />
+                      </Field>
+                      <Field label="Repository visibility">
+                        <select value={repositoryPrivate ? "private" : "public"} onChange={(event) => setRepositoryPrivate(event.target.value === "private")}>
+                          <option value="private">Private</option>
+                          <option value="public">Public</option>
+                        </select>
+                      </Field>
                       <Field label="Vercel project name" hint="Lowercase letters, numbers, and hyphens.">
                         <input value={vercelProject} onChange={(event) => setVercelProject(projectSlug(event.target.value))} placeholder="company-gutter-quote" />
                       </Field>
@@ -510,9 +644,10 @@ export function SetupBuilder() {
                       <div className="deployment-success">
                         <div className="deployment-success__top">
                           <span><CheckCircle2 size={20} /></span>
-                          <div><b>Production build started</b><p>{deployment.project.created ? "A new Vercel project was created." : "The existing Vercel project was updated."}</p></div>
+                          <div><b>Independent company site created</b><p>The approved configuration was committed to its own repository and its production build started.</p></div>
                         </div>
                         <div className="deployment-links">
+                          <a href={deployment.repository.url} target="_blank" rel="noreferrer">Open GitHub repository <ExternalLink size={13} /></a>
                           <a href={deployment.deployment.url} target="_blank" rel="noreferrer">Open deployment <ExternalLink size={13} /></a>
                           <a href={deployment.dashboardUrl} target="_blank" rel="noreferrer">View build in Vercel <ExternalLink size={13} /></a>
                         </div>
@@ -531,19 +666,19 @@ export function SetupBuilder() {
                       </div>
                     )}
 
-                    <button type="button" className="deploy-button" disabled={deploying || !vercelProject || !deployKey} onClick={deployToVercel}>
-                      {deploying ? <><LoaderCircle className="spin" size={17} /> Creating production build…</> : <><Rocket size={17} /> Deploy to Vercel</>}
+                    <button type="button" className="deploy-button" disabled={deploying || !repositoryName || !vercelProject || !deployKey} onClick={publishCompanySite}>
+                      {deploying ? <><LoaderCircle className="spin" size={17} /> Generating company site…</> : <><Rocket size={17} /> Create GitHub repository & deploy</>}
                     </button>
-                    <p className="deployment-footnote"><ShieldCheck size={12} /> Credentials are sent only to this app’s secure server route. Your Vercel token is never exposed in the browser.</p>
+                    <p className="deployment-footnote"><ShieldCheck size={12} /> The approved branding and pricing are committed to the customer repository. API keys remain server-only Vercel variables.</p>
                   </section>
                 )}
 
                 <div className="publish-actions">
-                  <button type="button" className="secondary-button" onClick={() => { setConfig(DEFAULT_CONFIG); setSaved(false); setDeployment(null); setDeployError("") }}><RotateCcw size={16} /> Reset demo</button>
+                  <button type="button" className="secondary-button" onClick={resetDemo}><RotateCcw size={16} /> Reset demo</button>
                   {saved ? (
-                    <Link href="/" className="secondary-button">Open local preview <ExternalLink size={17} /></Link>
+                    <Link href="/?preview=contractor" target="_blank" className="secondary-button">Open test preview <ExternalLink size={17} /></Link>
                   ) : (
-                    <button type="button" className="primary-button" onClick={publish}>Save & prepare deployment <Sparkles size={17} /></button>
+                    <button type="button" className="primary-button" onClick={publish}>Save & start testing <Sparkles size={17} /></button>
                   )}
                 </div>
               </SetupSection>

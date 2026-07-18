@@ -5,6 +5,10 @@ A reusable, white-label instant gutter quote experience built with Next.js. This
 ## What is included
 
 - Company setup studio at `/setup`
+- Production-style contractor preview mode with lead delivery and tracking disabled
+- Address-test history with three successful estimates required before approval
+- Approval snapshots that are invalidated when branding, coverage, products, or pricing change
+- One approved customer configuration per generated GitHub repository
 - Company name, tagline, contact details, logo upload, and selectable site colors
 - Optional theme palette extraction from an uploaded company logo
 - State, county, and custom-county service-area configuration
@@ -27,7 +31,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000/setup` to configure a company, then open `http://localhost:3000` to test the customer quote.
+Open `http://localhost:3000/setup` to configure a company. After saving, use **Open completed site in test mode** to run addresses through the actual quote experience and return to Setup Studio for approval.
 
 ## Pricing model
 
@@ -42,7 +46,11 @@ The customer can correct the estimated linear footage and number of stories befo
 
 ## Company configuration
 
-The setup studio saves drafts to browser local storage. A deployed company site receives its configuration through `NEXT_PUBLIC_COMPANY_CONFIG`, so branding, coverage, products, prices, finishes, and the public Meta Pixel ID are compiled into that company's site.
+The setup studio saves drafts, address-test results, and approval state to browser local storage. Test mode records successful automatic or manual estimates but skips lead delivery and Meta tracking.
+
+After three successful address tests, contractor approval freezes a fingerprint of the exact configuration. Any later branding, coverage, product, or pricing edit invalidates that approval. Publishing creates a new repository from the template, commits the approved configuration to `company-site.json`, and connects that independent repository to its own Vercel project.
+
+Generated customer repositories compile branding, coverage, products, prices, finishes, and the public Meta Pixel ID from `company-site.json`. Server credentials remain encrypted Vercel environment variables and are never committed to GitHub.
 
 Branded product presets are disabled by default and provided as editable references. Contractors should enable only products they are authorized to sell and verify current manufacturer specifications, dealer terms, warranties, availability, and installed pricing before publishing.
 
@@ -59,17 +67,20 @@ Copy `.env.example` to `.env.local` and add only the services you plan to use:
 
 The quote still provides manual fallbacks when mapping or measurement data is unavailable. Lead email and tracking failures never block the customer from seeing the estimate.
 
-## Vercel deployment setup
+## White-label publishing setup
 
-The final setup step creates one Vercel project per gutter company.
+The final setup step creates one GitHub repository and one Vercel project per gutter company.
 
 1. Push **this new project** to a new GitHub repository. Do not point the integration at either original source repository.
-2. Install the Vercel GitHub integration for the new template repository.
-3. Configure the Vercel variables in `.env.example` on the admin/template deployment.
-4. Deploy the admin/template project.
-5. Complete company setup, select **Save & prepare deployment**, enter the deployment key, and select **Deploy to Vercel**.
+2. In GitHub repository settings, enable **Template repository** for this project.
+3. Create a fine-grained GitHub token that can generate and update repositories for the configured owner.
+4. Install the Vercel GitHub integration with access to newly generated customer repositories. Selecting access to all repositories is the simplest automated setup.
+5. Configure the GitHub, Vercel, and publishing-key variables in `.env.example` on the admin/template deployment.
+6. Deploy the admin/template project.
+7. Complete company setup, save the draft, and run at least three addresses through contractor test mode.
+8. Approve the tested configuration, enter unique GitHub and Vercel project names, and select **Create GitHub repository & deploy**.
 
-The public company configuration is stored as a plain production environment variable. Any configured Google, Resend, and Meta server credentials are copied to the generated project as encrypted production variables; they are never sent to the browser. Each company configuration's email address is the default lead recipient.
+Any configured Google, Resend, and Meta server credentials are copied to the generated Vercel project as encrypted production variables; they are never committed to GitHub or sent to the browser. Each company configuration's email address is the default lead recipient.
 
 If a custom domain requires verification, the publish screen displays the DNS record returned by Vercel.
 
