@@ -20,8 +20,11 @@ export type StoryPrices = {
   3: number
 }
 
+export type GutterProductKind = "gutter-system" | "gutter-with-guard" | "guard-only"
+
 export type GutterProduct = {
   id: string
+  kind: GutterProductKind
   name: string
   tagline: string
   description: string
@@ -30,6 +33,7 @@ export type GutterProduct = {
   warrantyYears: number
   workmanshipYears: number
   badge?: string
+  sourceUrl?: string
   colors: GutterColor[]
 }
 
@@ -127,6 +131,7 @@ const BASE_CONFIG: CompanyConfig = {
   gutterProducts: [
     {
       id: "seamless-aluminum",
+      kind: "gutter-system",
       name: "6-inch seamless aluminum gutters",
       tagline: "Best value",
       description: "Custom-cut seamless aluminum gutters with hidden hangers and sealed corners.",
@@ -138,8 +143,33 @@ const BASE_CONFIG: CompanyConfig = {
       colors: DEFAULT_COLORS,
     },
     {
-      id: "gutter-guards",
-      name: "Seamless gutters + gutter guards",
+      id: "seven-inch-seamless",
+      kind: "gutter-system",
+      name: "7-inch seamless aluminum gutters",
+      tagline: "High capacity",
+      description: "Oversized seamless gutters for large or steep roof areas and heavier rainfall.",
+      enabled: false,
+      pricePerFoot: { 1: 11, 2: 14, 3: 17 },
+      warrantyYears: 20,
+      workmanshipYears: 5,
+      colors: DEFAULT_COLORS,
+    },
+    {
+      id: "half-round",
+      kind: "gutter-system",
+      name: "6-inch half-round gutters",
+      tagline: "Classic profile",
+      description: "A traditional half-round profile for historic, premium, and architecturally detailed homes.",
+      enabled: false,
+      pricePerFoot: { 1: 15, 2: 18, 3: 21 },
+      warrantyYears: 20,
+      workmanshipYears: 5,
+      colors: DEFAULT_COLORS,
+    },
+    {
+      id: "perforated-gutter-guards",
+      kind: "gutter-with-guard",
+      name: "Seamless gutters + perforated gutter guards",
       tagline: "Low maintenance",
       description: "Seamless aluminum gutters with perforated aluminum guards to help shed leaves and debris.",
       enabled: true,
@@ -147,6 +177,109 @@ const BASE_CONFIG: CompanyConfig = {
       warrantyYears: 20,
       workmanshipYears: 5,
       colors: DEFAULT_COLORS,
+    },
+    {
+      id: "micro-mesh-gutter-guards",
+      kind: "gutter-with-guard",
+      name: "Seamless gutters + micro-mesh gutter guards",
+      tagline: "Premium protection",
+      description: "Seamless aluminum gutters with fine stainless micro-mesh guards for smaller debris and roof grit.",
+      enabled: false,
+      pricePerFoot: { 1: 18, 2: 21, 3: 24 },
+      warrantyYears: 25,
+      workmanshipYears: 5,
+      colors: DEFAULT_COLORS,
+    },
+    {
+      id: "gutter-helmet",
+      kind: "guard-only",
+      name: "Gutter Helmet® gutter protection",
+      tagline: "Surface-tension cover",
+      description: "A professionally installed solid aluminum cover that uses a textured, nose-forward surface to direct water into existing gutters.",
+      enabled: false,
+      pricePerFoot: { 1: 20, 2: 23, 3: 26 },
+      warrantyYears: 0,
+      workmanshipYears: 0,
+      sourceUrl: "https://www.gutterhelmet.com/our-products/",
+      colors: [],
+    },
+    {
+      id: "leaffilter",
+      kind: "guard-only",
+      name: "LeafFilter® gutter protection",
+      tagline: "Three-piece micro-mesh",
+      description: "A professionally installed three-piece system with a fine stainless steel micro-mesh screen for existing gutters.",
+      enabled: false,
+      pricePerFoot: { 1: 22, 2: 25, 3: 28 },
+      warrantyYears: 0,
+      workmanshipYears: 0,
+      sourceUrl: "https://www.leaffilter.com/why-leaffilter/leaffilter/",
+      colors: [],
+    },
+    {
+      id: "leafguard",
+      kind: "gutter-with-guard",
+      name: "Leafguard® one-piece gutter system",
+      tagline: "Hooded gutter replacement",
+      description: "A seamless one-piece gutter replacement with an integrated curved hood that uses liquid adhesion to manage water and shed debris.",
+      enabled: false,
+      pricePerFoot: { 1: 30, 2: 34, 3: 38 },
+      warrantyYears: 0,
+      workmanshipYears: 0,
+      sourceUrl: "https://www.leafguard.com/how-it-works",
+      colors: DEFAULT_COLORS,
+    },
+    {
+      id: "mastershield",
+      kind: "guard-only",
+      name: "MasterShield® gutter protection",
+      tagline: "Copper-enhanced micro-mesh",
+      description: "A pitched micro-mesh guard with stainless steel fabric and copper threads designed for professional dealer installation.",
+      enabled: false,
+      pricePerFoot: { 1: 18, 2: 21, 3: 24 },
+      warrantyYears: 0,
+      workmanshipYears: 0,
+      sourceUrl: "https://mastershield.com/",
+      colors: [],
+    },
+    {
+      id: "leafblaster-pro",
+      kind: "guard-only",
+      name: "LeafBlaster Pro® gutter protection",
+      tagline: "Contractor-installed guard",
+      description: "A contractor-channel family that includes stainless micro-mesh, frame-reinforced micro-mesh, and all-aluminum guard options.",
+      enabled: false,
+      pricePerFoot: { 1: 12, 2: 15, 3: 18 },
+      warrantyYears: 0,
+      workmanshipYears: 0,
+      sourceUrl: "https://leafblasterpro.com/",
+      colors: [],
+    },
+    {
+      id: "raindrop",
+      kind: "guard-only",
+      name: "RainDrop® gutter guard",
+      tagline: "Polypropylene guard",
+      description: "A low-profile polypropylene gutter guard designed to adapt to a wide range of roof styles and gutter sizes.",
+      enabled: false,
+      pricePerFoot: { 1: 10, 2: 13, 3: 16 },
+      warrantyYears: 0,
+      workmanshipYears: 0,
+      sourceUrl: "https://www.raindropgutterguard.com/products/gutter-guards.html",
+      colors: [],
+    },
+    {
+      id: "englert-microguard",
+      kind: "guard-only",
+      name: "Englert MicroGuard® gutter screen",
+      tagline: "Micro-perforated aluminum",
+      description: "A low-profile micro-perforated aluminum screen designed to keep common debris out while preserving water flow.",
+      enabled: false,
+      pricePerFoot: { 1: 9, 2: 12, 3: 15 },
+      warrantyYears: 0,
+      workmanshipYears: 0,
+      sourceUrl: "https://www.englertinc.com/gutters/microguard",
+      colors: [],
     },
   ],
   downspoutPrice: { 1: 85, 2: 150, 3: 215 },
@@ -167,26 +300,41 @@ function validStoryPrices(value: unknown, fallback: StoryPrices): StoryPrices {
 
 function normalizeCompanyConfig(value: Partial<CompanyConfig>, fallback: CompanyConfig): CompanyConfig {
   const incomingProducts = Array.isArray(value.gutterProducts) ? value.gutterProducts : []
-  const gutterProducts = incomingProducts.length
-    ? incomingProducts
-        .filter((product) => product?.id && product?.name)
-        .slice(0, 8)
-        .map((product, index) => {
-          const fallbackProduct = fallback.gutterProducts.find((item) => item.id === product.id)
-            ?? fallback.gutterProducts[index]
-            ?? fallback.gutterProducts[0]
-          return {
-            ...fallbackProduct,
-            ...product,
-            pricePerFoot: validStoryPrices(product.pricePerFoot, fallbackProduct.pricePerFoot),
-            colors: Array.isArray(product.colors)
-              ? product.colors
-                  .filter((color) => color?.name && /^#[0-9a-f]{6}$/i.test(color.hex))
-                  .slice(0, 32)
-              : fallbackProduct.colors,
-          }
-        })
-    : fallback.gutterProducts
+  const validIncomingProducts = incomingProducts
+    .filter((product) => product?.id && product?.name)
+    .map((product) => product.id === "gutter-guards" ? { ...product, id: "perforated-gutter-guards" } : product)
+    .slice(0, 16)
+  const normalizeProduct = (product: GutterProduct, fallbackProduct: GutterProduct) => {
+    const kind = product.kind === "gutter-system" || product.kind === "gutter-with-guard" || product.kind === "guard-only"
+      ? product.kind
+      : fallbackProduct.kind
+    const sourceUrl = product.sourceUrl === ""
+      ? undefined
+      : product.sourceUrl && /^https?:\/\//i.test(product.sourceUrl)
+        ? product.sourceUrl
+        : fallbackProduct.sourceUrl
+    return {
+      ...fallbackProduct,
+      ...product,
+      kind,
+      sourceUrl,
+      pricePerFoot: validStoryPrices(product.pricePerFoot, fallbackProduct.pricePerFoot),
+      colors: Array.isArray(product.colors)
+        ? product.colors
+            .filter((color) => color?.name && /^#[0-9a-f]{6}$/i.test(color.hex))
+            .slice(0, 32)
+        : fallbackProduct.colors,
+    }
+  }
+  const gutterProducts = [
+    ...fallback.gutterProducts.map((fallbackProduct) => {
+      const incoming = validIncomingProducts.find((product) => product.id === fallbackProduct.id)
+      return incoming ? normalizeProduct(incoming, fallbackProduct) : fallbackProduct
+    }),
+    ...validIncomingProducts
+      .filter((product) => !fallback.gutterProducts.some((fallbackProduct) => fallbackProduct.id === product.id))
+      .map((product) => normalizeProduct(product, fallback.gutterProducts[0])),
+  ].slice(0, 16)
 
   const customTheme = value.customTheme ?? {
     primary: value.primaryColor ?? fallback.primaryColor,

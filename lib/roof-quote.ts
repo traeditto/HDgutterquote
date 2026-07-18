@@ -224,7 +224,7 @@ export function quoteForMaterial(
   const downspouts = downspoutCount(linearFeet)
   const total =
     linearFeet * gutterPricePerFoot(material, stories) +
-    downspouts * downspoutPrice(stories, downspoutPrices)
+    (material.kind === "guard-only" ? 0 : downspouts * downspoutPrice(stories, downspoutPrices))
 
   return {
     material,
