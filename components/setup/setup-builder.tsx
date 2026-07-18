@@ -383,9 +383,10 @@ export function SetupBuilder() {
               <SetupSection
                 eyebrow="03 · Products & pricing"
                 title="Build your gutter menu"
-                description="Enable the systems you install, set height-based pricing, and choose the finishes customers can preview."
+                description="Enable gutter systems, guard packages, or recognizable manufacturer presets, then customize every customer-facing detail."
               >
-                <div className="pricing-note"><CircleDollarSign size={19} /><p><b>Pricing is per linear foot.</b> The quote adds the configured downspout price based on the estimated home height.</p></div>
+                <div className="pricing-note"><CircleDollarSign size={19} /><p><b>Pricing is per linear foot.</b> New gutter systems add the configured downspout price. Guard-only options price the existing gutter run without new downspouts.</p></div>
+                <div className="pricing-note"><Settings2 size={19} /><p><b>Manufacturer presets start disabled.</b> Enable only products your company is authorized to offer, verify current dealer terms and warranties, and replace the sample pricing with your local installed pricing.</p></div>
                 <div className="mb-4 grid gap-3 rounded-xl border border-[#dfe4df] bg-white p-4 sm:grid-cols-3">
                   {([1, 2, 3] as const).map((tier) => (
                     <Field key={tier} label={`${tier === 3 ? "3+" : tier}-story downspout`}>
@@ -411,6 +412,14 @@ export function SetupBuilder() {
                             <Field label="Short label"><input value={product.tagline} onChange={(e) => updateProduct(product.id, { tagline: e.target.value })} /></Field>
                             <Field label="Badge"><input value={product.badge ?? ""} onChange={(e) => updateProduct(product.id, { badge: e.target.value })} placeholder="Most popular" /></Field>
                             <Field label="Description" wide><input value={product.description} onChange={(e) => updateProduct(product.id, { description: e.target.value })} /></Field>
+                            <Field label="Product type">
+                              <select value={product.kind} onChange={(e) => updateProduct(product.id, { kind: e.target.value as typeof product.kind })}>
+                                <option value="gutter-system">New gutter system</option>
+                                <option value="gutter-with-guard">New gutter + guard</option>
+                                <option value="guard-only">Guard for existing gutters</option>
+                              </select>
+                            </Field>
+                            <Field label="Official product URL"><input type="url" value={product.sourceUrl ?? ""} onChange={(e) => updateProduct(product.id, { sourceUrl: e.target.value })} placeholder="https://manufacturer.com/product" /></Field>
                             {([1, 2, 3] as const).map((tier) => (
                               <Field key={tier} label={`${tier === 3 ? "3+" : tier}-story price / ft`}>
                                 <div className="money-input"><span>$</span><input type="number" min="0" value={product.pricePerFoot[tier]} onChange={(e) => updateProduct(product.id, { pricePerFoot: { ...product.pricePerFoot, [tier]: Number(e.target.value) } })} /><small>/ ft</small></div>
@@ -419,7 +428,11 @@ export function SetupBuilder() {
                             <Field label="Manufacturer warranty"><div className="money-input"><input type="number" min="0" value={product.warrantyYears} onChange={(e) => updateProduct(product.id, { warrantyYears: Number(e.target.value) })} /><small>years</small></div></Field>
                             <Field label="Workmanship warranty"><div className="money-input"><input type="number" min="0" value={product.workmanshipYears} onChange={(e) => updateProduct(product.id, { workmanshipYears: Number(e.target.value) })} /><small>years</small></div></Field>
                           </div>
-                          <div className="mt-5 border-t border-[#e5e8e4] pt-4">
+                          {product.kind === "guard-only" ? (
+                            <div className="mt-5 rounded-lg border border-[#dfe4df] bg-white p-3 text-[9px] leading-relaxed text-[#637067]">
+                              Guard-only products use the customer&apos;s existing gutter finish, so no gutter color selector appears in the quote.
+                            </div>
+                          ) : <div className="mt-5 border-t border-[#e5e8e4] pt-4">
                             <b className="text-[10px] text-[#3c4a42]">Customer finish colors</b>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
                               {product.colors.map((color) => (
@@ -435,7 +448,7 @@ export function SetupBuilder() {
                               <input type="color" value={newColors[product.id]?.hex ?? "#ffffff"} onChange={(e) => setNewColors((current) => ({ ...current, [product.id]: { name: current[product.id]?.name ?? "", hex: e.target.value } }))} className="h-9 w-12" />
                               <button type="button" className="primary-button" onClick={() => { const color = newColors[product.id]; if (!color?.name.trim()) return; updateProduct(product.id, { colors: [...product.colors, { id: `${product.id}-${Date.now()}`, name: color.name.trim(), hex: color.hex }] }); setNewColors((current) => ({ ...current, [product.id]: { name: "", hex: "#ffffff" } })) }}>Add</button>
                             </div>
-                          </div>
+                          </div>}
                         </div>
                       )}
                     </article>
@@ -465,7 +478,7 @@ export function SetupBuilder() {
                   <ReviewCard label="Gutter systems" action={() => setActiveStep(2)} wide>
                     <div className="review-products">
                       {activeProducts.map((product) => (
-                        <div key={product.id}><span className="roof-dot" /><b>{product.name}</b><small>From {formatCurrency(product.pricePerFoot[1])} / linear ft</small></div>
+                        <div key={product.id}><span className="roof-dot" /><b>{product.name}</b><small>{product.kind === "guard-only" ? "Guard only" : product.kind === "gutter-with-guard" ? "Gutter + guard" : "Gutter system"} · From {formatCurrency(product.pricePerFoot[1])} / linear ft</small></div>
                       ))}
                     </div>
                   </ReviewCard>

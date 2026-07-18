@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Ruler, CornerDownRight, ArrowRight } from "lucide-react"
+import { Check, Ruler, CornerDownRight, ArrowRight, ExternalLink, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { GutterVisualizer } from "@/components/quote/gutter-visualizer"
@@ -60,6 +60,7 @@ export function MaterialsStep({
     stories,
     config.downspoutPrice,
   )
+  const selectedMaterial = materials.find((material) => material.id === selected)
 
   const stats = [
     {
@@ -69,8 +70,8 @@ export function MaterialsStep({
     },
     {
       icon: CornerDownRight,
-      label: "Estimated downspouts",
-      value: `${downspouts}`,
+      label: selectedMaterial?.kind === "guard-only" ? "Installation type" : "Estimated downspouts",
+      value: selectedMaterial?.kind === "guard-only" ? "Guard only" : `${downspouts}`,
     },
   ]
 
@@ -78,7 +79,7 @@ export function MaterialsStep({
     <div className="mx-auto max-w-5xl">
       <div className="text-center">
         <h2 className="text-balance font-heading text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-          Your gutter estimate is ready. Pick a system.
+          Your gutter estimate is ready. Pick an option.
         </h2>
         <p className="mx-auto mt-2 max-w-lg text-pretty text-muted-foreground">
           Estimated pricing for{" "}
@@ -146,9 +147,9 @@ export function MaterialsStep({
               How many stories is the home?
             </h3>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              Taller homes need longer downspouts and more careful access, so
-              pricing steps up with height. We prefilled the height we detected —
-              adjust it if that&apos;s not right.
+              Taller homes require more careful access and, for new gutter systems,
+              longer downspouts. We prefilled the height we detected — adjust it if
+              that&apos;s not right.
             </p>
           </div>
           <div
@@ -207,6 +208,14 @@ export function MaterialsStep({
           const activeColor = colorIndex[material.id] ?? 0
           const selectedColor = material.colors[activeColor]
           const selectedColorName = selectedColor?.name
+          const categoryLabel = material.kind === "guard-only"
+            ? "Guard for existing gutters"
+            : material.kind === "gutter-with-guard"
+              ? "New gutter + guard"
+              : "New gutter system"
+          const sourceUrl = material.sourceUrl && /^https?:\/\//i.test(material.sourceUrl)
+            ? material.sourceUrl
+            : undefined
           return (
             <div
               key={material.id}
@@ -227,13 +236,22 @@ export function MaterialsStep({
                   : "border-border hover:border-accent/50 hover:shadow-sm",
               )}
             >
-              <div
-                className="relative size-24 shrink-0 overflow-hidden rounded-xl border border-border sm:size-28"
-                style={{ backgroundColor: selectedColor?.hex ?? "#f5f2ea" }}
-              >
-                <div className="absolute inset-x-0 top-1/2 h-4 -translate-y-1/2 bg-background/45 shadow-inner" />
-                <div className="absolute left-5 top-0 h-full w-3 bg-background/35" />
-              </div>
+              {material.kind === "guard-only" ? (
+                <div
+                  className="relative flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted sm:size-28"
+                  style={{ backgroundImage: "repeating-linear-gradient(135deg, transparent 0 5px, rgba(0,0,0,.06) 5px 6px)" }}
+                >
+                  <ShieldCheck className="size-10 text-accent" />
+                </div>
+              ) : (
+                <div
+                  className="relative size-24 shrink-0 overflow-hidden rounded-xl border border-border sm:size-28"
+                  style={{ backgroundColor: selectedColor?.hex ?? "#f5f2ea" }}
+                >
+                  <div className="absolute inset-x-0 top-1/2 h-4 -translate-y-1/2 bg-background/45 shadow-inner" />
+                  <div className="absolute left-5 top-0 h-full w-3 bg-background/35" />
+                </div>
+              )}
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -249,13 +267,14 @@ export function MaterialsStep({
                 <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
                   {material.description}
                 </p>
+                <p className="mt-1.5 text-[11px] font-semibold text-accent">{categoryLabel}</p>
                 <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                  <span>{material.warrantyYears}-yr manufacturer warranty</span>
-                  <span>{material.workmanshipYears}-yr workmanship warranty</span>
+                  <span>{material.warrantyYears > 0 ? `${material.warrantyYears}-yr manufacturer warranty` : "Manufacturer warranty to be confirmed"}</span>
+                  <span>{material.workmanshipYears > 0 ? `${material.workmanshipYears}-yr workmanship warranty` : "Workmanship warranty to be confirmed"}</span>
                 </div>
 
                 {/* Finish options */}
-                <div className="mt-3">
+                {material.kind !== "guard-only" && <div className="mt-3">
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <span>Finish:</span>
                     <span className="font-medium text-foreground">
@@ -290,7 +309,19 @@ export function MaterialsStep({
                       )
                     })}
                   </div>
-                </div>
+                </div>}
+
+                {sourceUrl && (
+                  <a
+                    href={sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-accent underline-offset-2 hover:underline"
+                  >
+                    Manufacturer details <ExternalLink className="size-3" />
+                  </a>
+                )}
 
                 <div className="mt-3 font-heading text-lg font-extrabold text-foreground">
                   {low === high ? (
@@ -324,6 +355,15 @@ export function MaterialsStep({
         (() => {
           const material = materials.find((m) => m.id === selected)
           if (!material) return null
+          if (material.kind === "guard-only") {
+            return (
+              <div className="mt-8 rounded-2xl border border-border bg-card p-5 text-center">
+                <ShieldCheck className="mx-auto size-7 text-accent" />
+                <h3 className="mt-2 font-heading text-base font-bold text-foreground">Protection for the existing gutter system</h3>
+                <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">Guard appearance and compatibility vary by roof edge and gutter condition. The contractor will confirm fit, preparation, and the exact installed product during the free inspection.</p>
+              </div>
+            )
+          }
           const color = material.colors[colorIndex[material.id] ?? 0]
           return (
             <div className="mt-8">

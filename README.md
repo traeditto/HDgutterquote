@@ -8,7 +8,9 @@ A reusable, white-label instant gutter quote experience built with Next.js. This
 - Company name, tagline, contact details, logo upload, and selectable site colors
 - Optional theme palette extraction from an uploaded company logo
 - State, county, and custom-county service-area configuration
-- Configurable gutter systems with separate 1-, 2-, and 3-story prices per linear foot
+- Contractor-selectable 6-inch, 7-inch, half-round, perforated-guard, and micro-mesh-guard systems
+- Disabled reference presets for Gutter Helmet, LeafFilter, Leafguard, MasterShield, LeafBlaster Pro, RainDrop, and Englert MicroGuard
+- Separate 1-, 2-, and 3-story prices per linear foot for every enabled system
 - Configurable downspout pricing, warranties, badges, and finish colors
 - Address suggestions, aerial property confirmation, and draggable map pin
 - Public GIS, property-record, building-footprint, and optional Google Solar measurement fallbacks
@@ -29,16 +31,20 @@ Open `http://localhost:3000/setup` to configure a company, then open `http://loc
 
 ## Pricing model
 
-The quote estimates the home's gutter run from the measured building footprint. The total combines:
+The quote estimates the home's gutter run from the measured building footprint. For new gutter systems, the total combines:
 
 - the configured product price per linear foot for the selected building-height tier; and
 - the configured per-downspout price for that tier.
+
+Guard-only products are priced by linear foot against the existing gutter run and do not add new downspouts.
 
 The customer can correct the estimated linear footage and number of stories before choosing a system.
 
 ## Company configuration
 
 The setup studio saves drafts to browser local storage. A deployed company site receives its configuration through `NEXT_PUBLIC_COMPANY_CONFIG`, so branding, coverage, products, prices, finishes, and the public Meta Pixel ID are compiled into that company's site.
+
+Branded product presets are disabled by default and provided as editable references. Contractors should enable only products they are authorized to sell and verify current manufacturer specifications, dealer terms, warranties, availability, and installed pricing before publishing.
 
 Generated public company sites hide `/setup`. Before exposing the admin/template deployment to untrusted users, add authentication and persistent company records. The deployment endpoint is protected by `GUTTERQUOTE_DEPLOY_KEY`, but a production multi-tenant platform should also authorize every deployment through signed-in company accounts.
 

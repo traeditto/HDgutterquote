@@ -48,7 +48,7 @@ export function SuccessStep({
         You&apos;re all set, {firstName}!
       </h2>
       <p className="mx-auto mt-3 max-w-md text-pretty leading-relaxed text-muted-foreground">
-        Your {material.name} gutter estimate of{" "}
+        Your {material.name} estimate of{" "}
         <span className="font-semibold text-foreground">
           {quote.low === quote.high
             ? formatCurrency(quote.low)

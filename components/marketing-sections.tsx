@@ -43,7 +43,7 @@ export function HowItWorks() {
     {
       icon: FileCheck,
       title: "See instant pricing",
-      body: "Compare 6-inch seamless gutters with or without gutter guards — all in under a minute.",
+      body: "Compare the gutter sizes, profiles, and guard systems your local contractor offers — all in under a minute.",
     },
     {
       icon: Droplets,
