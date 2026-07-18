@@ -3,6 +3,7 @@
 import Script from "next/script"
 import { useEffect } from "react"
 import { META_PIXEL_ID } from "@/lib/meta-pixel"
+import { IS_DEPLOYED_COMPANY_SITE } from "@/lib/company-config"
 
 /**
  * Injects the Meta (Facebook) Pixel base code and fires PageView on every
@@ -14,6 +15,7 @@ import { META_PIXEL_ID } from "@/lib/meta-pixel"
 export function MetaPixel() {
   useEffect(() => {
     if (!META_PIXEL_ID) return
+    if (!IS_DEPLOYED_COMPANY_SITE && new URLSearchParams(window.location.search).get("preview") === "contractor") return
     // Mirror the browser PageView to CAPI using the shared id the inline script
     // stashed on window. Delay briefly so the pixel can set the _fbp/_fbc
     // cookies first, improving server-side match quality. Fire-and-forget.
@@ -51,6 +53,7 @@ export function MetaPixel() {
     <>
       <Script id="meta-pixel" strategy="afterInteractive">
         {`
+          if (${IS_DEPLOYED_COMPANY_SITE ? "true" : "new URLSearchParams(window.location.search).get('preview') !== 'contractor'"}) {
           !function(f,b,e,v,n,t,s)
           {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
           n.callMethod.apply(n,arguments):n.queue.push(arguments)};
@@ -64,6 +67,7 @@ export function MetaPixel() {
             ? crypto.randomUUID()
             : 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2);
           fbq('track', 'PageView', {}, { eventID: window.__metaPageViewId });
+          }
         `}
       </Script>
       <noscript>

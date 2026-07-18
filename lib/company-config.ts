@@ -1,3 +1,5 @@
+import generatedCompanySite from "@/company-site.json"
+
 export type ThemeSource = "custom" | "logo"
 
 export type ThemePalette = {
@@ -367,9 +369,12 @@ function readDeployedConfig(): CompanyConfig | null {
 }
 
 const deployedConfig = readDeployedConfig()
+const generatedConfigValue = generatedCompanySite.generated && generatedCompanySite.config
+  ? normalizeCompanyConfig(generatedCompanySite.config as Partial<CompanyConfig>, BASE_CONFIG)
+  : null
 
-export const IS_DEPLOYED_COMPANY_SITE = Boolean(deployedConfig)
-export const DEFAULT_CONFIG: CompanyConfig = deployedConfig ?? BASE_CONFIG
+export const IS_DEPLOYED_COMPANY_SITE = Boolean(deployedConfig || generatedConfigValue)
+export const DEFAULT_CONFIG: CompanyConfig = deployedConfig ?? generatedConfigValue ?? BASE_CONFIG
 
 export function loadCompanyConfig(): CompanyConfig {
   if (IS_DEPLOYED_COMPANY_SITE || typeof window === "undefined") return DEFAULT_CONFIG

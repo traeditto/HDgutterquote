@@ -380,6 +380,28 @@ a { color: inherit; text-decoration: none; }
 .published-banner { display: flex; align-items: center; gap: 12px; padding: 15px; background: #eff7e9; border: 1px solid #d4e4c8; border-radius: 9px; color: #397148; margin-bottom: 15px; }
 .published-banner b { font-size: 10px; }
 .published-banner p { margin: 2px 0 0; color: #6d806f; font-size: 8px; }
+.workflow-card, .approval-card { margin-top: 14px; background: #fff; border: 1px solid #d8ded9; border-radius: 10px; padding: 16px; }
+.workflow-card__header { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; }
+.workflow-card__header > span, .approval-card > div > span { width: 34px; height: 34px; border-radius: 8px; background: #eff4e3; color: var(--brand); display: grid; place-items: center; }
+.workflow-card__header b, .approval-card b { display: block; font-size: 10px; }
+.workflow-card__header p, .approval-card p { color: #7f8a84; font-size: 8px; line-height: 1.45; margin: 2px 0 0; }
+.workflow-card__header strong { font: 800 16px var(--font-manrope); color: var(--brand); }
+.workflow-progress { height: 5px; overflow: hidden; border-radius: 99px; background: #e7ece7; margin-top: 13px; }
+.workflow-progress i { display: block; height: 100%; background: var(--brand); transition: width .2s; }
+.workflow-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 13px; }
+.test-address-list { display: grid; gap: 7px; margin-top: 13px; }
+.test-address-list > div { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: center; border: 1px solid #e1e6e1; border-radius: 7px; padding: 9px; }
+.test-address-list > div > span { color: #91621e; }
+.test-address-list > div.is-success > span { color: #397148; }
+.test-address-list > div.is-stale { background: #f6f6f4; opacity: .68; }
+.test-address-list b { display: block; font-size: 8px; }
+.test-address-list small { display: block; color: #808b84; font-size: 7px; margin-top: 2px; }
+.test-address-list time { color: #969f99; font-size: 7px; }
+.empty-tests { margin: 0; border: 1px dashed #d8ded9; border-radius: 7px; padding: 12px; color: #7f8a84; font-size: 8px; line-height: 1.5; text-align: center; }
+.approval-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.approval-card > div { display: flex; align-items: center; gap: 10px; }
+.approval-card.is-approved { border-color: #cee1c5; background: #f4faef; }
+.approval-card.is-approved > div > span { background: #dfeeda; color: #397148; }
 .vercel-deploy-card { margin-top: 14px; background: #fff; border: 1px solid #d8ded9; border-radius: 10px; padding: 16px; box-shadow: 0 8px 28px rgba(18,44,36,.06); }
 .vercel-deploy-card__header { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding-bottom: 14px; margin-bottom: 15px; border-bottom: 1px solid #e7ebe7; }
 .vercel-deploy-card__header > span { width: 34px; height: 34px; border-radius: 8px; background: #111; color: #fff; display: grid; place-items: center; }
@@ -435,6 +457,7 @@ a { color: inherit; text-decoration: none; }
 .setup-nav { display: flex; justify-content: space-between; margin-top: 28px; padding-top: 18px; border-top: 1px solid #dfe4df; }
 .primary-button, .secondary-button { min-height: 39px; border-radius: 7px; padding: 0 15px; display: inline-flex; gap: 8px; align-items: center; justify-content: center; font-size: 9px; font-weight: 750; cursor: pointer; }
 .primary-button { border: 0; background: var(--brand); color: white; }
+.primary-button:disabled { opacity: .38; cursor: not-allowed; transform: none; box-shadow: none; }
 .secondary-button { border: 1px solid #d4dbd5; background: white; }
 .secondary-button:disabled { opacity: .35; cursor: not-allowed; }
 .live-preview { background: #e9ece6; border-left: 1px solid #dfe3dd; padding: 34px 30px; }
@@ -554,6 +577,10 @@ a { color: inherit; text-decoration: none; }
   .review-card--wide { grid-column: auto; }
   .review-products { grid-template-columns: 1fr; }
   .deployment-fields { grid-template-columns: 1fr; }
+  .workflow-actions, .approval-card { align-items: stretch; flex-direction: column; }
+  .workflow-actions > *, .approval-card > button { width: 100%; }
+  .test-address-list > div { grid-template-columns: 24px 1fr; }
+  .test-address-list time { grid-column: 2; }
   .dns-records > div { grid-template-columns: 32px 1fr; }
   .dns-records code:last-child { grid-column: 2; }
   .publish-actions { gap: 8px; }
