@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   billableGutterLength,
   measureRoof,
@@ -63,12 +63,39 @@ export function QuoteTool({
   const [unavailableReason, setUnavailableReason] = useState<
     "not-found" | "error" | "out-of-area"
   >("not-found")
+  const activitySession = useRef<string | null>(null)
+
+  function sessionId() {
+    if (!activitySession.current) activitySession.current = crypto.randomUUID()
+    return activitySession.current
+  }
+
+  function trackActivity(
+    nextStage: "address-entered" | "measurement-started" | "measured" | "measurement-unavailable" | "out-of-area" | "lead-submitted" | "quote-viewed",
+    details: { name?: string; email?: string; phone?: string } = {},
+  ) {
+    if (contractorPreview || !address) return
+    void fetch("/api/address-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: sessionId(), address, stage: nextStage, ...details }),
+      keepalive: true,
+    }).catch(() => undefined)
+  }
 
   // Step 1: capture the address and show the aerial confirmation before we
   // spend a measurement on it.
   function handleAddress(value: string) {
     setAddress(value)
     setStage("confirm")
+    if (!contractorPreview) {
+      void fetch("/api/address-events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sessionId(), address: value, stage: "address-entered" }),
+        keepalive: true,
+      }).catch(() => undefined)
+    }
   }
 
   // Step 2: once the customer confirms the aerial view is their home, run the
@@ -77,8 +104,10 @@ export function QuoteTool({
   async function runMeasurement(coords?: { lat: number; lon: number }) {
     setStage("measuring")
     setConfirmedCoords(coords ?? null)
+    trackActivity("measurement-started")
     const result = await measureRoof(address, coords)
     if (result.status === "ok") {
+      trackActivity("measured")
       setMeasurement(result.measurement)
       setStories(result.measurement.stories ?? 1)
       if (contractorPreview) {
@@ -98,6 +127,7 @@ export function QuoteTool({
         setStage("lead")
       }
     } else {
+      trackActivity(result.status === "out-of-area" ? "out-of-area" : "measurement-unavailable")
       if (contractorPreview) {
         recordAddressTest({
           address,
@@ -120,6 +150,7 @@ export function QuoteTool({
     setGutterLength(null)
     setStories(null)
     setContact({ name: "", email: "", phone: "" })
+    activitySession.current = null
   }
 
   const selectedMaterial = materials.find((m) => m.id === selectedId) ?? null
@@ -160,6 +191,7 @@ export function QuoteTool({
           onManualEstimate={(m) => {
             setMeasurement(m)
             setStories(m.stories ?? 1)
+            trackActivity("measured")
             if (contractorPreview) {
               recordAddressTest({
                 address,
@@ -188,6 +220,7 @@ export function QuoteTool({
           onGutterLengthChange={setGutterLength}
           onSubmit={(lead) => {
             setContact(lead)
+            trackActivity("lead-submitted", lead)
             // Pre-select the recommended gutter system so pricing is visible
             // immediately on the quote step.
             if (!selectedId) {
@@ -212,7 +245,10 @@ export function QuoteTool({
           stories={stories ?? measurement.stories ?? 1}
           onStoriesChange={setStories}
           confirmedCoords={confirmedCoords}
-          onContinue={() => setStage("success")}
+          onContinue={() => {
+            trackActivity("quote-viewed")
+            setStage("success")
+          }}
         />
       )}
 

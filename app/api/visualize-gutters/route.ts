@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { fetchBasePhoto, type ImageryAngle } from "@/lib/roof-imagery"
+import { allowPlatformRequest, consumeRenderCredit } from "@/lib/contractor-platform"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,6 +50,15 @@ export async function POST(request: Request) {
     )
   }
 
+  const client = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+  const hourlyLimit = Math.max(4, Math.min(100, Number(process.env.RENDER_MAX_PER_IP_HOUR || 12) || 12))
+  if (!(await allowPlatformRequest("render", client, hourlyLimit, 3600))) {
+    return NextResponse.json(
+      { error: "Too many AI preview requests. Please try again later." },
+      { status: 429 },
+    )
+  }
+
   const base = await fetchBasePhoto(
     address,
     angle === "satellite" ? "satellite" : "street",
@@ -58,6 +68,14 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "We couldn't find a usable photo of this home." },
       { status: 404 },
+    )
+  }
+
+  const credit = await consumeRenderCredit()
+  if (!credit.allowed) {
+    return NextResponse.json(
+      { error: "AI home previews are temporarily unavailable." },
+      { status: 402 },
     )
   }
 
@@ -125,6 +143,7 @@ export async function POST(request: Request) {
       after: afterDataUrl,
       angle: base.angle,
       year: base.year,
+      rendersRemaining: credit.remaining,
     })
   } catch (err) {
     console.error("visualize-gutters generation failed:", (err as Error).message)

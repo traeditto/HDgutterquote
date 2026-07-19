@@ -1,4 +1,6 @@
 import generatedCompanySite from "@/company-site.json"
+export { COUNTIES_BY_STATE, STATE_NAMES } from "@/lib/us-geography"
+import { COUNTIES_BY_STATE } from "@/lib/us-geography"
 
 export type ThemeSource = "custom" | "logo"
 
@@ -59,38 +61,6 @@ export type CompanyConfig = {
 
 export const CONFIG_STORAGE_KEY = "gutterquote-company-config-v1"
 
-export const COUNTIES_BY_STATE: Record<string, string[]> = {
-  FL: [
-    "Alachua", "Baker", "Brevard", "Broward", "Clay", "Collier", "Duval", "Flagler",
-    "Hillsborough", "Lake", "Lee", "Marion", "Miami-Dade", "Nassau", "Orange", "Osceola",
-    "Palm Beach", "Pasco", "Pinellas", "Polk", "Putnam", "St. Johns", "Seminole", "Volusia",
-  ],
-  GA: [
-    "Barrow", "Bartow", "Chatham", "Cherokee", "Clayton", "Cobb", "Columbia", "Coweta",
-    "DeKalb", "Fayette", "Forsyth", "Fulton", "Gwinnett", "Hall", "Henry", "Richmond",
-  ],
-  NC: [
-    "Alamance", "Buncombe", "Cabarrus", "Catawba", "Cumberland", "Durham", "Forsyth", "Gaston",
-    "Guilford", "Johnston", "Mecklenburg", "New Hanover", "Union", "Wake",
-  ],
-  SC: [
-    "Aiken", "Anderson", "Beaufort", "Berkeley", "Charleston", "Dorchester", "Greenville", "Horry",
-    "Lexington", "Richland", "Spartanburg", "York",
-  ],
-  TX: [
-    "Bexar", "Brazoria", "Collin", "Dallas", "Denton", "El Paso", "Fort Bend", "Harris", "Hays",
-    "Montgomery", "Tarrant", "Travis", "Williamson",
-  ],
-}
-
-export const STATE_NAMES: Record<string, string> = {
-  FL: "Florida",
-  GA: "Georgia",
-  NC: "North Carolina",
-  SC: "South Carolina",
-  TX: "Texas",
-}
-
 const DEFAULT_COLORS: GutterColor[] = [
   ["white-80", "White 80°", "#f7f5ee"],
   ["white-30", "White 30°", "#f1eee5"],
@@ -129,7 +99,7 @@ const BASE_CONFIG: CompanyConfig = {
   primaryColor: "#1e3a4f",
   accentColor: "#f5a623",
   state: "FL",
-  counties: ["Clay", "Duval", "Nassau", "St. Johns"],
+  counties: ["Clay County", "Duval County", "Nassau County", "St. Johns County"],
   gutterProducts: [
     {
       id: "seamless-aluminum",
@@ -344,6 +314,20 @@ function normalizeCompanyConfig(value: Partial<CompanyConfig>, fallback: Company
   }
   const logoTheme = value.logoTheme?.primary && value.logoTheme?.accent ? value.logoTheme : undefined
   const themeSource = value.themeSource === "logo" && logoTheme ? "logo" : "custom"
+  const state = typeof value.state === "string" && COUNTIES_BY_STATE[value.state]
+    ? value.state
+    : fallback.state
+  const officialCounties = COUNTIES_BY_STATE[state] ?? []
+  const counties = (Array.isArray(value.counties) ? value.counties : fallback.counties)
+    .map((county) => {
+      const trimmed = String(county).trim()
+      return officialCounties.find((official) => official.toLowerCase() === trimmed.toLowerCase())
+        ?? officialCounties.find((official) => official.toLowerCase() === `${trimmed} county`.toLowerCase())
+        ?? trimmed
+    })
+    .filter(Boolean)
+    .filter((county, index, all) => all.indexOf(county) === index)
+    .slice(0, 400)
 
   return {
     ...fallback,
@@ -351,7 +335,8 @@ function normalizeCompanyConfig(value: Partial<CompanyConfig>, fallback: Company
     themeSource,
     customTheme,
     ...(logoTheme ? { logoTheme } : {}),
-    counties: Array.isArray(value.counties) ? value.counties.slice(0, 100) : fallback.counties,
+    state,
+    counties,
     gutterProducts,
     downspoutPrice: validStoryPrices(value.downspoutPrice, fallback.downspoutPrice),
   }

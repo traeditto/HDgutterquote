@@ -70,7 +70,7 @@ export function AddressStep({
         options. No phone calls. No pressure.
       </p>
       <p className="mx-auto mt-3 text-sm font-medium text-muted-foreground">
-        Now serving {config.counties.length} {config.counties.length === 1 ? "county" : "counties"} in {STATE_NAMES[config.state] ?? config.state}.
+        Now serving {config.counties.length} {config.counties.length === 1 ? "county or equivalent" : "counties and equivalents"} in {STATE_NAMES[config.state] ?? config.state}.
       </p>
 
       <form
@@ -140,6 +140,10 @@ export function AddressStep({
         )}
 
       </form>
+
+      <p className="mx-auto mt-3 max-w-xl text-[11px] leading-relaxed text-muted-foreground">
+        By continuing, you agree that your address and quote progress may be shared with {config.companyName}, even if you leave before completing the quote.
+      </p>
 
       <ul className="mx-auto mt-8 flex max-w-xl flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
         <li className="flex items-center gap-2">

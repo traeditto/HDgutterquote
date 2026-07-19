@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { randomBytes } from "node:crypto"
 import type { CompanyConfig } from "@/lib/company-config"
 import {
   configFingerprint,
@@ -194,7 +195,7 @@ async function findDomain(projectId: string, domain: string) {
   }
 }
 
-function productionEnvironment() {
+function productionEnvironment(tenantId: string, contractorAdminKey: string) {
   const variables: Array<{ key: string; value: string; type: "encrypted"; target: "production" }> = []
   for (const key of [
     "GOOGLE_MAPS_API_KEY",
@@ -203,10 +204,22 @@ function productionEnvironment() {
     "LEAD_FROM",
     "META_CAPI_ACCESS_TOKEN",
     "META_TEST_EVENT_CODE",
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_RENDER_CREDIT_PRICE_ID",
+    "RENDER_CREDITS_PER_PACK",
+    "RENDER_INITIAL_CREDITS",
+    "RENDER_MAX_PER_IP_HOUR",
+    "ADMIN_LEAD_RETENTION_DAYS",
   ]) {
     const value = process.env[key]
     if (value) variables.push({ key, value, type: "encrypted", target: "production" })
   }
+  variables.push(
+    { key: "CONTRACTOR_TENANT_ID", value: tenantId, type: "encrypted", target: "production" },
+    { key: "CONTRACTOR_ADMIN_KEY", value: contractorAdminKey, type: "encrypted", target: "production" },
+  )
   return variables
 }
 
@@ -274,6 +287,9 @@ export async function POST(request: Request) {
   }
   const targetOwner = process.env.GITHUB_OWNER || templateOwner
   const targetFullName = `${targetOwner}/${repositoryName}`
+  const contractorTenantId = targetFullName.toLowerCase()
+  const contractorAdminKey = randomBytes(24).toString("base64url")
+  let issuedContractorAdminKey: string | null = null
   let repository: GithubRepository | null = null
 
   try {
@@ -322,13 +338,14 @@ export async function POST(request: Request) {
       throw new ServiceRequestError("That Vercel project name is already connected to another repository.", 409)
     }
     if (!project) {
+      issuedContractorAdminKey = contractorAdminKey
       project = await vercelRequest<VercelProject>("/v11/projects", {
         method: "POST",
         body: JSON.stringify({
           name: projectName,
           framework: "nextjs",
           gitRepository: { type: "github", repo: repository.full_name },
-          environmentVariables: productionEnvironment(),
+          environmentVariables: productionEnvironment(contractorTenantId, contractorAdminKey),
         }),
       })
     }
@@ -378,6 +395,8 @@ export async function POST(request: Request) {
       },
       domain: projectDomain,
       dashboardUrl: deployment.inspectorUrl || "https://vercel.com/dashboard",
+      contractorAdminKey: issuedContractorAdminKey,
+      contractorDashboardUrl: `https://${domain || deployment.url}/contractor`,
     })
   } catch (error) {
     const repositoryHint = repository ? ` The GitHub repository is available at ${repository.html_url}.` : ""

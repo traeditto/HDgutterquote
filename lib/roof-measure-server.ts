@@ -16,6 +16,7 @@
 
 import type { RoofMeasurement } from "./roof-quote"
 import { DEFAULT_CONFIG } from "./company-config"
+import { STATE_FIPS } from "./us-geography"
 
 const SQM_TO_SQFT = 10.7639
 const EARTH_RADIUS_M = 6378137
@@ -107,14 +108,6 @@ interface CountyConfig {
   footprint?: FootprintLayer
   /** Parcel boundaries used to snap OSM buildings to the correct lot. */
   parcel?: ParcelLayer
-}
-
-const STATE_FIPS: Record<string, string> = {
-  FL: "12",
-  GA: "13",
-  NC: "37",
-  SC: "45",
-  TX: "48",
 }
 
 /**
@@ -1092,14 +1085,16 @@ export async function measureRoofFromLatLon(
 async function measureRoofFromGeo(
   geo: GeocodeResult,
 ): Promise<ServerMeasureResult> {
-  const countyName = (geo.countyName || (geo.countyFips ? COUNTY_SOURCES[geo.countyFips]?.name : "") || "")
-    .replace(/\s+County$/i, "")
-    .trim()
+  const countyName = (geo.countyName || (geo.countyFips ? COUNTY_SOURCES[geo.countyFips]?.name : "") || "").trim()
   const stateMatches = Boolean(
     geo.countyFips && STATE_FIPS[DEFAULT_CONFIG.state] === geo.countyFips.slice(0, 2),
   )
   const countyMatches = DEFAULT_CONFIG.counties.some(
-    (county) => county.toLowerCase() === countyName.toLowerCase(),
+    (county) => {
+      const configured = county.trim().toLowerCase()
+      const resolved = countyName.toLowerCase()
+      return configured === resolved || `${configured} county` === resolved
+    },
   )
 
   // Only serve addresses inside the company-configured state and counties.

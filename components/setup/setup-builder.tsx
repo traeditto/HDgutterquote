@@ -68,6 +68,8 @@ type DeploymentResponse = {
     verification?: Array<{ type?: string; domain?: string; value?: string; reason?: string }>
   } | null
   dashboardUrl: string
+  contractorAdminKey: string | null
+  contractorDashboardUrl: string
 }
 
 function projectSlug(value: string) {
@@ -201,7 +203,7 @@ export function SetupBuilder() {
   }
 
   const addCustomCounty = () => {
-    const county = customCounty.trim().replace(/\s+County$/i, "")
+    const county = customCounty.trim()
     if (county && !config.counties.includes(county)) update("counties", [...config.counties, county])
     setCustomCounty("")
   }
@@ -402,7 +404,7 @@ export function SetupBuilder() {
                   <Field label="Phone number">
                     <input value={config.phone} onChange={(e) => update("phone", e.target.value)} placeholder="(555) 555-0199" />
                   </Field>
-                  <Field label="Quote email">
+                  <Field label="Lead delivery email" hint="Completed quote leads are sent to this address.">
                     <input type="email" value={config.email} onChange={(e) => update("email", e.target.value)} placeholder="quotes@company.com" />
                   </Field>
                   <Field label={config.themeSource === "logo" ? "Logo primary color" : "Primary page color"} hint="Used for page backgrounds, headings, and buttons.">
@@ -441,7 +443,7 @@ export function SetupBuilder() {
                   {(COUNTIES_BY_STATE[config.state] ?? []).map((county) => (
                     <label key={county} className={config.counties.includes(county) ? "is-selected" : ""}>
                       <input type="checkbox" checked={config.counties.includes(county)} onChange={() => toggleCounty(county)} />
-                      <span><Check size={13} /></span>{county} County
+                      <span><Check size={13} /></span>{county}
                     </label>
                   ))}
                 </div>
@@ -454,7 +456,7 @@ export function SetupBuilder() {
                 {config.counties.some((county) => !(COUNTIES_BY_STATE[config.state] ?? []).includes(county)) && (
                   <div className="custom-chips">
                     {config.counties.filter((county) => !(COUNTIES_BY_STATE[config.state] ?? []).includes(county)).map((county) => (
-                      <button key={county} type="button" onClick={() => toggleCounty(county)}>{county} County <span>×</span></button>
+                      <button key={county} type="button" onClick={() => toggleCounty(county)}>{county} <span>×</span></button>
                     ))}
                   </div>
                 )}
@@ -650,7 +652,14 @@ export function SetupBuilder() {
                           <a href={deployment.repository.url} target="_blank" rel="noreferrer">Open GitHub repository <ExternalLink size={13} /></a>
                           <a href={deployment.deployment.url} target="_blank" rel="noreferrer">Open deployment <ExternalLink size={13} /></a>
                           <a href={deployment.dashboardUrl} target="_blank" rel="noreferrer">View build in Vercel <ExternalLink size={13} /></a>
+                          <a href={deployment.contractorDashboardUrl} target="_blank" rel="noreferrer">Open contractor dashboard <ExternalLink size={13} /></a>
                         </div>
+                        {deployment.contractorAdminKey && (
+                          <div className="domain-status">
+                            <div><ShieldCheck size={16} /><span><b>Save this one-time contractor dashboard key</b><small>It will not be shown again. Store it in the contractor&apos;s password manager.</small></span></div>
+                            <div className="dns-records"><div><span>KEY</span><code>{deployment.contractorAdminKey}</code></div></div>
+                          </div>
+                        )}
                         {deployment.domain && (
                           <div className={`domain-status ${deployment.domain.verified ? "is-verified" : ""}`}>
                             <div><Globe2 size={16} /><span><b>{deployment.domain.name}</b><small>{deployment.domain.verified ? "Domain verified and attached" : "Domain attached · DNS verification required"}</small></span></div>

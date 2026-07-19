@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server"
 import { DEFAULT_CONFIG } from "@/lib/company-config"
+import { STATE_ABBR_BY_NAME, STATE_CENTERS } from "@/lib/us-geography"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const STATE_CENTERS: Record<string, { lat: number; lon: number }> = {
-  FL: { lat: 28.1, lon: -81.6 },
-  GA: { lat: 32.7, lon: -83.3 },
-  NC: { lat: 35.5, lon: -79.4 },
-  SC: { lat: 33.8, lon: -80.9 },
-  TX: { lat: 31.0, lon: -99.2 },
-}
 const bias = STATE_CENTERS[DEFAULT_CONFIG.state] ?? STATE_CENTERS.FL
 const BIAS_LAT = bias.lat
 const BIAS_LON = bias.lon
@@ -154,7 +148,7 @@ async function photonSuggest(q: string) {
       const houseNumber =
         p.housenumber || (isStreet && queryHouseNumber ? queryHouseNumber : "")
       const line1 = houseNumber ? `${houseNumber} ${street}` : street
-      const stateAbbr = STATE_ABBR[p.state] ?? p.state
+      const stateAbbr = STATE_ABBR_BY_NAME[p.state] ?? p.state
       const cityState = p.postcode
         ? `${p.city}, ${stateAbbr} ${p.postcode}`
         : `${p.city}, ${stateAbbr}`
@@ -190,15 +184,6 @@ async function photonSuggest(q: string) {
   } catch {
     return NextResponse.json({ suggestions: [] })
   }
-}
-
-/** Photon returns full state names; map the supported setup states to abbreviations. */
-const STATE_ABBR: Record<string, string> = {
-  Florida: "FL",
-  Georgia: "GA",
-  "North Carolina": "NC",
-  "South Carolina": "SC",
-  Texas: "TX",
 }
 
 function isInServiceArea(address: string): boolean {
