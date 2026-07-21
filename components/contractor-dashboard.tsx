@@ -9,6 +9,8 @@ import { useCompanyConfig } from "@/components/company-config-provider"
 type Activity = {
   sessionId: string
   address: string
+  state: string
+  county: string
   stage: string
   firstSeenAt: string
   updatedAt: string
@@ -148,7 +150,7 @@ export function ContractorDashboard() {
             <div className="divide-y divide-border">
               {data.activities.map((activity) => (
                 <article key={activity.sessionId} className="grid gap-3 p-5 md:grid-cols-[1fr_180px_180px] md:items-center">
-                  <div><p className="flex items-start gap-2 font-semibold"><MapPin className="mt-0.5 size-4 shrink-0 text-accent" /> {activity.address}</p>{(activity.name || activity.email || activity.phone) && <p className="mt-1 pl-6 text-sm text-muted-foreground">{[activity.name, activity.email, activity.phone].filter(Boolean).join(" · ")}</p>}</div>
+                  <div><p className="flex items-start gap-2 font-semibold"><MapPin className="mt-0.5 size-4 shrink-0 text-accent" /> {activity.address}</p><p className="mt-1 pl-6 text-xs text-muted-foreground">{activity.county}, {activity.state}</p>{(activity.name || activity.email || activity.phone) && <p className="mt-1 pl-6 text-sm text-muted-foreground">{[activity.name, activity.email, activity.phone].filter(Boolean).join(" · ")}</p>}</div>
                   <span className="w-fit rounded-full bg-muted px-3 py-1 text-xs font-semibold">{STAGE_LABELS[activity.stage] || activity.stage}</span>
                   <time className="text-sm text-muted-foreground md:text-right">{new Date(activity.updatedAt).toLocaleString()}</time>
                 </article>

@@ -117,6 +117,7 @@ function companyEnvironment(configValue: string) {
 
   for (const key of [
     "GOOGLE_MAPS_API_KEY",
+    "PLATFORM_SESSION_SECRET",
     "GOOGLE_GENERATIVE_AI_API_KEY",
     "RESEND_API_KEY",
     "LEAD_FROM",
@@ -182,7 +183,7 @@ async function findDomain(projectId: string, domain: string) {
 }
 
 export async function POST(request: Request) {
-  const requiredSettings = ["VERCEL_TOKEN", "VERCEL_TEMPLATE_REPO", "GUTTERQUOTE_DEPLOY_KEY"].filter(
+  const requiredSettings = ["VERCEL_TOKEN", "VERCEL_TEMPLATE_REPO", "GUTTERQUOTE_DEPLOY_KEY", "GOOGLE_MAPS_API_KEY", "PLATFORM_SESSION_SECRET"].filter(
     (key) => !process.env[key],
   )
 

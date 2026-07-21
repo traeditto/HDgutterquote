@@ -199,6 +199,7 @@ function productionEnvironment(tenantId: string, contractorAdminKey: string) {
   const variables: Array<{ key: string; value: string; type: "encrypted"; target: "production" }> = []
   for (const key of [
     "GOOGLE_MAPS_API_KEY",
+    "PLATFORM_SESSION_SECRET",
     "GOOGLE_GENERATIVE_AI_API_KEY",
     "RESEND_API_KEY",
     "LEAD_FROM",
@@ -230,6 +231,8 @@ export async function POST(request: Request) {
     ["GITHUB_TEMPLATE_REPO", templateRepository],
     ["VERCEL_TOKEN", process.env.VERCEL_TOKEN],
     ["GUTTERQUOTE_DEPLOY_KEY", process.env.GUTTERQUOTE_DEPLOY_KEY],
+    ["GOOGLE_MAPS_API_KEY", process.env.GOOGLE_MAPS_API_KEY],
+    ["PLATFORM_SESSION_SECRET", process.env.PLATFORM_SESSION_SECRET],
   ].filter(([, value]) => !value).map(([key]) => key)
 
   if (requiredSettings.length > 0) {

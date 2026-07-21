@@ -130,7 +130,8 @@ export type MeasureResult =
  * different/commercial provider later means changing only the server module.
  */
 export async function measureRoof(
-  address: string,
+  sessionId: string,
+  addressToken: string,
   coords?: { lat: number; lon: number },
 ): Promise<MeasureResult> {
   try {
@@ -140,7 +141,9 @@ export async function measureRoof(
       // Include corrected coordinates when the customer has moved the aerial pin
       // onto the right house; the server then measures that exact point.
       body: JSON.stringify(
-        coords ? { address, lat: coords.lat, lon: coords.lon } : { address },
+        coords
+          ? { sessionId, addressToken, lat: coords.lat, lon: coords.lon }
+          : { sessionId, addressToken },
       ),
     })
 

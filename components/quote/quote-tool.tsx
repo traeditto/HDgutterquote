@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import {
   billableGutterLength,
   measureRoof,
@@ -11,7 +11,7 @@ import { useCompanyConfig } from "@/components/company-config-provider"
 import { enabledProducts } from "@/lib/company-config"
 import { configFingerprint, recordAddressTest } from "@/lib/publish-workflow"
 import { Stepper } from "./stepper"
-import { AddressStep } from "./address-step"
+import { AddressStep, type VerifiedPropertyAddress } from "./address-step"
 import { ConfirmStep } from "./confirm-step"
 import { MeasuringStep } from "./measuring-step"
 import { LeadStep } from "./lead-step"
@@ -38,6 +38,10 @@ const STAGE_TO_STEP: Record<Stage, number> = {
   unavailable: 1,
 }
 
+function newQuoteSessionId() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 export function QuoteTool({
   contractorPreview = false,
   onEstimateGeneratedChange,
@@ -49,6 +53,8 @@ export function QuoteTool({
   const materials = enabledProducts(config)
   const [stage, setStage] = useState<Stage>("address")
   const [address, setAddress] = useState("")
+  const [addressVerification, setAddressVerification] = useState<VerifiedPropertyAddress | null>(null)
+  const [quoteSessionId, setQuoteSessionId] = useState("")
   const [measurement, setMeasurement] = useState<RoofMeasurement | null>(null)
   const [confirmedCoords, setConfirmedCoords] = useState<{
     lat: number
@@ -63,39 +69,35 @@ export function QuoteTool({
   const [unavailableReason, setUnavailableReason] = useState<
     "not-found" | "error" | "out-of-area"
   >("not-found")
-  const activitySession = useRef<string | null>(null)
 
-  function sessionId() {
-    if (!activitySession.current) activitySession.current = crypto.randomUUID()
-    return activitySession.current
-  }
+  useEffect(() => setQuoteSessionId(newQuoteSessionId()), [])
 
   function trackActivity(
     nextStage: "address-entered" | "measurement-started" | "measured" | "measurement-unavailable" | "out-of-area" | "lead-submitted" | "quote-viewed",
     details: { name?: string; email?: string; phone?: string } = {},
+    verification = addressVerification,
   ) {
-    if (contractorPreview || !address) return
+    if (contractorPreview || !verification || !quoteSessionId) return
     void fetch("/api/address-events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: sessionId(), address, stage: nextStage, ...details }),
+      body: JSON.stringify({
+        sessionId: quoteSessionId,
+        addressToken: verification.token,
+        stage: nextStage,
+        ...details,
+      }),
       keepalive: true,
     }).catch(() => undefined)
   }
 
   // Step 1: capture the address and show the aerial confirmation before we
   // spend a measurement on it.
-  function handleAddress(value: string) {
-    setAddress(value)
+  function handleAddress(verification: VerifiedPropertyAddress) {
+    setAddress(verification.address)
+    setAddressVerification(verification)
     setStage("confirm")
-    if (!contractorPreview) {
-      void fetch("/api/address-events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: sessionId(), address: value, stage: "address-entered" }),
-        keepalive: true,
-      }).catch(() => undefined)
-    }
+    trackActivity("address-entered", {}, verification)
   }
 
   // Step 2: once the customer confirms the aerial view is their home, run the
@@ -105,7 +107,7 @@ export function QuoteTool({
     setStage("measuring")
     setConfirmedCoords(coords ?? null)
     trackActivity("measurement-started")
-    const result = await measureRoof(address, coords)
+    const result = await measureRoof(quoteSessionId, addressVerification?.token || "", coords)
     if (result.status === "ok") {
       trackActivity("measured")
       setMeasurement(result.measurement)
@@ -144,13 +146,14 @@ export function QuoteTool({
   function handleRestart() {
     setStage("address")
     setAddress("")
+    setAddressVerification(null)
+    setQuoteSessionId(newQuoteSessionId())
     setMeasurement(null)
     setConfirmedCoords(null)
     setSelectedId(null)
     setGutterLength(null)
     setStories(null)
     setContact({ name: "", email: "", phone: "" })
-    activitySession.current = null
   }
 
   const selectedMaterial = materials.find((m) => m.id === selectedId) ?? null
@@ -170,7 +173,13 @@ export function QuoteTool({
       </div>
 
       {stage === "address" && (
-        <AddressStep onSubmit={handleAddress} initialValue={address} />
+        <AddressStep
+          onSubmit={handleAddress}
+          quoteSessionId={quoteSessionId}
+          contractorPreview={contractorPreview}
+          initialValue={address}
+          initialVerification={addressVerification}
+        />
       )}
 
       {stage === "confirm" && (
@@ -215,12 +224,13 @@ export function QuoteTool({
       {stage === "lead" && measurement && (
         <LeadStep
           address={address}
+          quoteSessionId={quoteSessionId}
+          addressToken={addressVerification?.token || ""}
           measurement={measurement}
           gutterLength={gutterLength}
           onGutterLengthChange={setGutterLength}
           onSubmit={(lead) => {
             setContact(lead)
-            trackActivity("lead-submitted", lead)
             // Pre-select the recommended gutter system so pricing is visible
             // immediately on the quote step.
             if (!selectedId) {
