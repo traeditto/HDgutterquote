@@ -12,6 +12,8 @@ export type QuoteActivityStage =
 export type QuoteActivity = {
   sessionId: string
   address: string
+  state: string
+  county: string
   stage: QuoteActivityStage
   firstSeenAt: string
   updatedAt: string
@@ -76,6 +78,8 @@ function retentionSeconds() {
 export async function recordQuoteActivity(input: {
   sessionId: string
   address: string
+  state: string
+  county: string
   stage: QuoteActivityStage
   name?: string
   email?: string
@@ -96,6 +100,8 @@ export async function recordQuoteActivity(input: {
     ...existing,
     sessionId: input.sessionId,
     address: input.address,
+    state: input.state,
+    county: input.county,
     stage: input.stage,
     firstSeenAt: existing?.firstSeenAt || now,
     updatedAt: now,

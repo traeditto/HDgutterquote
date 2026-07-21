@@ -16,7 +16,9 @@ A reusable, white-label instant gutter quote experience built with Next.js. This
 - Disabled reference presets for Gutter Helmet, LeafFilter, Leafguard, MasterShield, LeafBlaster Pro, RainDrop, and Englert MicroGuard
 - Separate 1-, 2-, and 3-story prices per linear foot for every enabled system
 - Configurable downspout pricing, warranties, badges, and finish colors
-- Address suggestions, aerial property confirmation, and draggable map pin
+- Google Places API (New) property autocomplete with server-verified state and county service-area enforcement
+- HMAC-signed, tenant- and quote-session-bound address verification before incomplete or completed leads are stored
+- Aerial property confirmation and draggable map pin
 - Public GIS, property-record, building-footprint, and optional Google Solar measurement fallbacks
 - Manual home-size fallback when a property cannot be measured automatically
 - Lead capture and optional Resend email delivery
@@ -58,13 +60,14 @@ Branded product presets are disabled by default and provided as editable referen
 
 Generated public company sites hide `/setup`. Before exposing the admin/template deployment to untrusted users, add authentication and persistent company records. The deployment endpoint is protected by `GUTTERQUOTE_DEPLOY_KEY`, but a production multi-tenant platform should also authorize every deployment through signed-in company accounts.
 
-Generated company sites include a protected `/contractor` dashboard. Publishing creates a unique dashboard access key and shows it once; save it in the contractor's password manager. Customer addresses are recorded as soon as quote entry begins, disclosed below the address form, and expire after `ADMIN_LEAD_RETENTION_DAYS` (30 by default). Contact details appear only after the customer submits them.
+Generated company sites include a protected `/contractor` dashboard. Publishing creates a unique dashboard access key and shows it once; save it in the contractor's password manager. A customer address is recorded only after Google verifies it in the service area and the customer continues, as disclosed below the address form, and expires after `ADMIN_LEAD_RETENTION_DAYS` (30 by default). Contact details appear only after the customer submits them.
 
 ## Optional service keys
 
 Copy `.env.example` to `.env.local` and add only the services you plan to use:
 
 - `GOOGLE_MAPS_API_KEY` for Places autocomplete, aerial imagery, precise geocoding, and optional Solar measurements
+- `PLATFORM_SESSION_SECRET` (at least 32 random characters) for expiring signed address-verification tokens
 - `GOOGLE_GENERATIVE_AI_API_KEY` for gutter color visualization
 - `RESEND_API_KEY` and `LEAD_FROM` for lead emails
 - `META_CAPI_ACCESS_TOKEN` and optional `META_TEST_EVENT_CODE` for server-side Meta events
@@ -86,7 +89,7 @@ The final setup step creates one GitHub repository and one Vercel project per gu
 7. Complete company setup, save the draft, and run at least three addresses through contractor test mode.
 8. Approve the tested configuration, enter unique GitHub and Vercel project names, and select **Create GitHub repository & deploy**.
 
-Configured Google, Resend, Meta, Upstash, and Stripe server credentials are copied to the generated Vercel project as encrypted production variables; they are never committed to GitHub or sent to the browser. Each company configuration's email address is the default lead recipient.
+Configured Google, signing, Resend, Meta, Upstash, and Stripe server credentials are copied to the generated Vercel project as encrypted production variables; they are never committed to GitHub or sent to the browser. `GOOGLE_MAPS_API_KEY` must remain server-only and must never use a `NEXT_PUBLIC_` prefix. Each company configuration's email address is the default lead recipient.
 
 Configure one Stripe webhook on the template/admin deployment at `/api/billing/webhook` and subscribe it to `checkout.session.completed` and `checkout.session.async_payment_succeeded`. The shared Upstash database keeps each generated company isolated under its generated tenant ID. A rendering credit is consumed server-side immediately before a Gemini image request, so browser refreshes cannot reset the paid balance.
 

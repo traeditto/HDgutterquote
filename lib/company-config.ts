@@ -380,6 +380,47 @@ export function enabledProducts(config: CompanyConfig) {
   return config.gutterProducts.filter((product) => product.enabled)
 }
 
+function normalizedAreaName(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+}
+
+function normalizedAreaBase(value: string) {
+  return normalizedAreaName(value)
+    .replace(/^(city and borough|municipality|city and county|city|borough) of /, "")
+    .replace(/ (county|parish|borough|census area|municipality|city)$/g, "")
+    .trim()
+}
+
+/**
+ * Resolve a Google county/county-equivalent to the official Census label for
+ * one state. Exact entity names win; suffix-insensitive matching is accepted
+ * only when it produces a single result, so independent cities never collide
+ * with same-named counties.
+ */
+export function matchCountyNameForState(state: string, candidate: string) {
+  const knownCounties = COUNTIES_BY_STATE[state] ?? []
+  const normalizedCandidate = normalizedAreaName(candidate)
+  const exactMatch = knownCounties.find((county) => normalizedAreaName(county) === normalizedCandidate)
+  if (exactMatch) return exactMatch
+
+  const candidateBase = normalizedAreaBase(candidate)
+  const baseMatches = knownCounties.filter((county) => normalizedAreaBase(county) === candidateBase)
+  return baseMatches.length === 1 ? baseMatches[0] : null
+}
+
+export function matchConfiguredServiceCounty(config: CompanyConfig, state: string, candidate: string) {
+  if (config.state !== state) return null
+  const canonicalCounty = matchCountyNameForState(state, candidate)
+  if (!canonicalCounty) return null
+  return config.counties.includes(canonicalCounty) ? canonicalCounty : null
+}
+
 export function storyTier(stories: number | undefined | null): StoryTier {
   if (!stories || stories < 2) return 1
   if (stories < 3) return 2

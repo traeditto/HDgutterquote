@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { Resend } from "resend"
 import { sendCapiEvent, splitName } from "@/lib/meta-capi"
 import { DEFAULT_CONFIG } from "@/lib/company-config"
+import { verifyAddressToken } from "@/lib/address-verification"
+import { contractorTenantId, recordQuoteActivity } from "@/lib/contractor-platform"
 
 export const runtime = "nodejs"
 
@@ -12,10 +14,11 @@ const FROM_ADDRESS =
   process.env.LEAD_FROM || `${DEFAULT_CONFIG.companyName} Gutter Quotes <onboarding@resend.dev>`
 
 interface LeadPayload {
+  sessionId?: string
+  addressToken?: string
   name?: string
   phone?: string
   email?: string
-  address?: string
   roofAreaSqFt?: number
   squares?: number
   pitch?: string
@@ -44,16 +47,6 @@ function escapeHtml(value: string): string {
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    // Don't block the customer's quote if email isn't configured yet.
-    console.log("[v0] RESEND_API_KEY missing — lead not emailed")
-    return NextResponse.json(
-      { ok: false, error: "email-not-configured" },
-      { status: 200 },
-    )
-  }
-
   let lead: LeadPayload
   try {
     lead = (await request.json()) as LeadPayload
@@ -64,7 +57,23 @@ export async function POST(request: Request) {
   const name = (lead.name ?? "").trim()
   const phone = (lead.phone ?? "").trim()
   const email = (lead.email ?? "").trim()
-  const address = (lead.address ?? "").trim()
+  const sessionId = (lead.sessionId ?? "").trim()
+  const addressToken = (lead.addressToken ?? "").trim()
+
+  if (!/^[a-zA-Z0-9_-]{8,100}$/.test(sessionId) || addressToken.length < 20 || addressToken.length > 2_000) {
+    return NextResponse.json(
+      { ok: false, error: "address-verification-required" },
+      { status: 400 },
+    )
+  }
+  const verifiedAddress = verifyAddressToken(addressToken, contractorTenantId(), sessionId)
+  if (!verifiedAddress) {
+    return NextResponse.json(
+      { ok: false, error: "address-verification-invalid" },
+      { status: 400 },
+    )
+  }
+  const address = verifiedAddress.formattedAddress
 
   if (!name || !phone || !email) {
     return NextResponse.json(
@@ -72,6 +81,17 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   }
+
+  await recordQuoteActivity({
+    sessionId,
+    address,
+    state: verifiedAddress.state,
+    county: verifiedAddress.county,
+    stage: "lead-submitted",
+    name,
+    email,
+    phone,
+  }).catch((error) => console.log("[v0] Lead activity storage failed:", error))
 
   // Server-side Meta Conversions API "Lead" event. Shares eventId with the
   // browser pixel so Meta dedupes them. Fire-and-forget: never block or fail
@@ -90,6 +110,7 @@ export async function POST(request: Request) {
         phone,
         firstName,
         lastName,
+        state: verifiedAddress.state,
         fbp: readCookie(cookieHeader, "_fbp"),
         fbc: readCookie(cookieHeader, "_fbc"),
         ip,
@@ -107,6 +128,8 @@ export async function POST(request: Request) {
     ["Phone", phone],
     ["Email", email],
     ["Address", address || "—"],
+    ["County", verifiedAddress.county],
+    ["State", verifiedAddress.state],
     [
       "Estimated gutter run",
       lead.roofAreaSqFt
@@ -146,6 +169,13 @@ export async function POST(request: Request) {
       </p>
     </div>
   `
+
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    // The verified lead is still retained for the contractor dashboard.
+    console.log("[v0] RESEND_API_KEY missing — verified lead retained but not emailed")
+    return NextResponse.json({ ok: true, email: { sent: false, reason: "email-not-configured" } })
+  }
 
   try {
     const resend = new Resend(apiKey)

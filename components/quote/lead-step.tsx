@@ -13,6 +13,8 @@ import { useCompanyConfig } from "@/components/company-config-provider"
 
 interface LeadStepProps {
   address: string
+  quoteSessionId: string
+  addressToken: string
   measurement: RoofMeasurement
   gutterLength: number | null
   onGutterLengthChange: (linearFeet: number | null) => void
@@ -26,6 +28,8 @@ function isValidPhone(phone: string): boolean {
 
 export function LeadStep({
   address,
+  quoteSessionId,
+  addressToken,
   measurement,
   gutterLength,
   onGutterLengthChange,
@@ -71,7 +75,8 @@ export function LeadStep({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...lead,
-          address,
+          sessionId: quoteSessionId,
+          addressToken,
           roofAreaSqFt: totalLinearFeet,
           squares: downspouts,
           pitch: measurement.pitch,

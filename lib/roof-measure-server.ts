@@ -15,7 +15,7 @@
 // All of these are free and require no API key. None of this runs in the browser.
 
 import type { RoofMeasurement } from "./roof-quote"
-import { DEFAULT_CONFIG } from "./company-config"
+import { DEFAULT_CONFIG, matchCountyNameForState } from "./company-config"
 import { STATE_FIPS } from "./us-geography"
 
 const SQM_TO_SQFT = 10.7639
@@ -1008,6 +1008,8 @@ export type ServerMeasureResult =
 /** Counties this tool currently serves, for display in the UI. */
 export const SERVICE_AREA_COUNTIES = DEFAULT_CONFIG.counties
 
+type VerifiedServiceArea = { state: string; county: string }
+
 /**
  * Measure a roof from a street address using only free public data.
  * Returns `out-of-area` outside the service area and `not-found` when no
@@ -1015,10 +1017,11 @@ export const SERVICE_AREA_COUNTIES = DEFAULT_CONFIG.counties
  */
 export async function measureRoofFromAddress(
   address: string,
+  serviceArea: VerifiedServiceArea,
 ): Promise<ServerMeasureResult> {
   const geo = await geocode(address)
   if (!geo) return { status: "not-found" }
-  return measureRoofFromGeo(geo)
+  return measureRoofFromGeo(geo, serviceArea)
 }
 
 /**
@@ -1063,8 +1066,9 @@ export async function measureRoofFromLatLon(
   lat: number,
   lon: number,
   address?: string,
+  serviceArea?: VerifiedServiceArea,
 ): Promise<ServerMeasureResult> {
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !serviceArea) {
     return { status: "not-found" }
   }
   const county = await reverseGeocodeCounty(lat, lon)
@@ -1074,7 +1078,7 @@ export async function measureRoofFromLatLon(
     countyFips: county.countyFips,
     countyName: county.countyName,
     matchedAddress: address,
-  })
+  }, serviceArea)
 }
 
 /**
@@ -1084,20 +1088,16 @@ export async function measureRoofFromLatLon(
  */
 async function measureRoofFromGeo(
   geo: GeocodeResult,
+  serviceArea: VerifiedServiceArea,
 ): Promise<ServerMeasureResult> {
   const countyName = (geo.countyName || (geo.countyFips ? COUNTY_SOURCES[geo.countyFips]?.name : "") || "").trim()
   const stateMatches = Boolean(
-    geo.countyFips && STATE_FIPS[DEFAULT_CONFIG.state] === geo.countyFips.slice(0, 2),
+    geo.countyFips && STATE_FIPS[serviceArea.state] === geo.countyFips.slice(0, 2),
   )
-  const countyMatches = DEFAULT_CONFIG.counties.some(
-    (county) => {
-      const configured = county.trim().toLowerCase()
-      const resolved = countyName.toLowerCase()
-      return configured === resolved || `${configured} county` === resolved
-    },
-  )
+  const countyMatches = matchCountyNameForState(serviceArea.state, countyName) === serviceArea.county
 
-  // Only serve addresses inside the company-configured state and counties.
+  // The expected service area came from the signed Google address token. We
+  // still re-derive the county here so a moved map pin cannot cross a boundary.
   if (!stateMatches || !countyMatches) {
     return {
       status: "out-of-area",
