@@ -201,6 +201,7 @@ function productionEnvironment(tenantId: string, contractorAdminKey: string) {
     "GOOGLE_MAPS_API_KEY",
     "PLATFORM_SESSION_SECRET",
     "GOOGLE_GENERATIVE_AI_API_KEY",
+    "GEMINI_IMAGE_MODEL",
     "RESEND_API_KEY",
     "LEAD_FROM",
     "META_CAPI_ACCESS_TOKEN",

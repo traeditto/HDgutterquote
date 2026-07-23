@@ -56,10 +56,6 @@ export function QuoteTool({
   const [addressVerification, setAddressVerification] = useState<VerifiedPropertyAddress | null>(null)
   const [quoteSessionId, setQuoteSessionId] = useState("")
   const [measurement, setMeasurement] = useState<RoofMeasurement | null>(null)
-  const [confirmedCoords, setConfirmedCoords] = useState<{
-    lat: number
-    lon: number
-  } | null>(null)
   const [selectedId, setSelectedId] = useState<MaterialId | null>(null)
   const [gutterLength, setGutterLength] = useState<number | null>(null)
   // Building height used for pricing. Defaults to the detected story count when
@@ -105,7 +101,6 @@ export function QuoteTool({
   // roof, `coords` carries the corrected location to measure instead.
   async function runMeasurement(coords?: { lat: number; lon: number }) {
     setStage("measuring")
-    setConfirmedCoords(coords ?? null)
     trackActivity("measurement-started")
     const result = await measureRoof(quoteSessionId, addressVerification?.token || "", coords)
     if (result.status === "ok") {
@@ -149,7 +144,6 @@ export function QuoteTool({
     setAddressVerification(null)
     setQuoteSessionId(newQuoteSessionId())
     setMeasurement(null)
-    setConfirmedCoords(null)
     setSelectedId(null)
     setGutterLength(null)
     setStories(null)
@@ -185,6 +179,8 @@ export function QuoteTool({
       {stage === "confirm" && (
         <ConfirmStep
           address={address}
+          addressToken={addressVerification?.token || ""}
+          sessionId={quoteSessionId}
           onConfirm={runMeasurement}
           onEdit={() => setStage("address")}
         />
@@ -247,6 +243,8 @@ export function QuoteTool({
       {stage === "materials" && measurement && (
         <MaterialsStep
           address={address}
+          quoteSessionId={quoteSessionId}
+          addressToken={addressVerification?.token || ""}
           measurement={measurement}
           selected={selectedId}
           onSelect={setSelectedId}
@@ -254,7 +252,7 @@ export function QuoteTool({
           onGutterLengthChange={setGutterLength}
           stories={stories ?? measurement.stories ?? 1}
           onStoriesChange={setStories}
-          confirmedCoords={confirmedCoords}
+          contractorPreview={contractorPreview}
           onContinue={() => {
             trackActivity("quote-viewed")
             setStage("success")

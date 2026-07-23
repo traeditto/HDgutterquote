@@ -27,8 +27,6 @@ type DashboardData = {
   retentionDays: number
 }
 
-const KEY_STORAGE = "gutterquote-contractor-access-key"
-
 const STAGE_LABELS: Record<string, string> = {
   "address-entered": "Address entered",
   "measurement-started": "Measurement started",
@@ -39,34 +37,35 @@ const STAGE_LABELS: Record<string, string> = {
   "quote-viewed": "Quote viewed",
 }
 
-export function ContractorDashboard() {
+export function ContractorDashboard({
+  authenticated,
+}: {
+  authenticated: boolean
+}) {
   const config = useCompanyConfig()
-  const [key, setKey] = useState("")
-  const [draftKey, setDraftKey] = useState("")
+  const [password, setPassword] = useState("")
   const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(authenticated)
   const [error, setError] = useState("")
   const [buying, setBuying] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
 
-  useEffect(() => {
-    const saved = window.sessionStorage.getItem(KEY_STORAGE) || ""
-    if (saved) setKey(saved)
-  }, [])
-
-  async function load(accessKey = key) {
-    if (!accessKey) return
+  async function load() {
     setLoading(true)
     setError("")
     try {
       const response = await fetch("/api/contractor/activity", {
-        headers: { "x-contractor-access-key": accessKey },
         cache: "no-store",
       })
       const result = await response.json()
-      if (!response.ok) throw new Error(response.status === 401 ? "That access key is not valid." : result.error || "Dashboard data could not be loaded.")
+      if (!response.ok) {
+        if (response.status === 401) {
+          window.location.reload()
+          return
+        }
+        throw new Error(result.error || "Dashboard data could not be loaded.")
+      }
       setData(result as DashboardData)
-      setKey(accessKey)
-      window.sessionStorage.setItem(KEY_STORAGE, accessKey)
     } catch (reason) {
       setData(null)
       setError(reason instanceof Error ? reason.message : "Dashboard data could not be loaded.")
@@ -76,10 +75,37 @@ export function ContractorDashboard() {
   }
 
   useEffect(() => {
-    if (key) void load(key)
-    // Load only when a stored key is restored.
+    if (authenticated) void load()
+    // Load once after the server confirms the signed HttpOnly session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
+  }, [authenticated])
+
+  async function signIn(event: FormEvent) {
+    event.preventDefault()
+    setSigningIn(true)
+    setError("")
+    try {
+      const response = await fetch("/api/contractor/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(
+          result.error || "The contractor dashboard could not be opened.",
+        )
+      }
+      window.location.reload()
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The contractor dashboard could not be opened.",
+      )
+      setSigningIn(false)
+    }
+  }
 
   async function buyCredits() {
     setBuying(true)
@@ -87,7 +113,6 @@ export function ContractorDashboard() {
     try {
       const response = await fetch("/api/billing/checkout", {
         method: "POST",
-        headers: { "x-contractor-access-key": key },
       })
       const result = await response.json()
       if (!response.ok || !result.url) throw new Error(result.error || "Checkout could not be started.")
@@ -98,30 +123,53 @@ export function ContractorDashboard() {
     }
   }
 
-  function signOut() {
-    window.sessionStorage.removeItem(KEY_STORAGE)
-    setKey("")
-    setDraftKey("")
-    setData(null)
+  async function signOut() {
+    await fetch("/api/contractor/logout", { method: "POST" }).catch(
+      () => undefined,
+    )
+    window.location.reload()
   }
 
-  if (!data) {
+  if (!authenticated) {
     return (
       <main className="min-h-screen bg-muted/30 px-4 py-12">
         <div className="mx-auto max-w-md rounded-3xl border border-border bg-card p-7 shadow-sm">
           <span className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><LockKeyhole className="size-6" /></span>
           <h1 className="mt-5 font-heading text-2xl font-extrabold">Contractor dashboard</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Enter the private dashboard key issued when this company site was deployed.</p>
-          <form className="mt-6 space-y-3" onSubmit={(event: FormEvent) => { event.preventDefault(); void load(draftKey.trim()) }}>
+          <form className="mt-6 space-y-3" onSubmit={signIn}>
             <label className="block text-sm font-semibold">Dashboard access key
-              <input type="password" value={draftKey} onChange={(event) => setDraftKey(event.target.value)} autoComplete="current-password" className="mt-2 h-12 w-full rounded-xl border border-input bg-background px-4 outline-none focus:border-accent" />
+              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" className="mt-2 h-12 w-full rounded-xl border border-input bg-background px-4 outline-none focus:border-accent" />
             </label>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={!draftKey.trim() || loading} className="h-12 w-full rounded-xl">
-              {loading ? <><LoaderCircle className="size-4 animate-spin" /> Opening dashboard…</> : "Open dashboard"}
+            <Button type="submit" disabled={!password.trim() || signingIn} className="h-12 w-full rounded-xl">
+              {signingIn ? <><LoaderCircle className="size-4 animate-spin" /> Opening dashboard…</> : "Open dashboard"}
             </Button>
           </form>
           <Link href="/" className="mt-5 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Return to quote site</Link>
+        </div>
+      </main>
+    )
+  }
+
+  if (!data) {
+    return (
+      <main className="min-h-screen bg-muted/30 px-4 py-12">
+        <div className="mx-auto max-w-md rounded-3xl border border-border bg-card p-7 text-center shadow-sm">
+          {loading ? (
+            <LoaderCircle className="mx-auto size-7 animate-spin text-accent" />
+          ) : (
+            <LockKeyhole className="mx-auto size-7 text-accent" />
+          )}
+          <h1 className="mt-4 font-heading text-xl font-extrabold">
+            {loading ? "Loading contractor dashboard…" : "Dashboard unavailable"}
+          </h1>
+          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+          {!loading && (
+            <Button className="mt-5" onClick={() => void load()}>
+              Try again
+            </Button>
+          )}
         </div>
       </main>
     )
@@ -132,7 +180,7 @@ export function ContractorDashboard() {
       <div className="mx-auto max-w-6xl">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div><p className="text-sm font-semibold text-accent">{config.companyName}</p><h1 className="font-heading text-3xl font-extrabold">Contractor dashboard</h1></div>
-          <div className="flex gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button><Button variant="outline" onClick={signOut}><LogOut className="size-4" /> Sign out</Button></div>
+          <div className="flex gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button><Button variant="outline" onClick={() => void signOut()}><LogOut className="size-4" /> Sign out</Button></div>
         </header>
 
         {error && <div className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{error}</div>}

@@ -1,7 +1,11 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import {
+  CONTRACTOR_COOKIE,
+  readContractorSession,
+} from "@/lib/contractor-auth"
+import {
+  contractorTenantId,
   getRenderCredits,
-  isContractorAuthorized,
   listQuoteActivity,
   platformStorageConfigured,
 } from "@/lib/contractor-platform"
@@ -9,8 +13,16 @@ import {
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET(request: Request) {
-  if (!isContractorAuthorized(request.headers.get("x-contractor-access-key"))) {
+export async function GET(request: NextRequest) {
+  let sessionTenant: string | null = null
+  try {
+    sessionTenant = readContractorSession(
+      request.cookies.get(CONTRACTOR_COOKIE)?.value,
+    )
+  } catch {
+    sessionTenant = null
+  }
+  if (sessionTenant !== contractorTenantId()) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 })
   }
   const storageConfigured = platformStorageConfigured()

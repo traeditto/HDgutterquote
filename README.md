@@ -22,8 +22,8 @@ A reusable, white-label instant gutter quote experience built with Next.js. This
 - Public GIS, property-record, building-footprint, and optional Google Solar measurement fallbacks
 - Manual home-size fallback when a property cannot be measured automatically
 - Lead capture and optional Resend email delivery
-- Gutter color visualization using an optional Google generative image model
-- Server-enforced Gemini rendering credits with Stripe credit-pack checkout
+- Street View-first gutter visualization with customer photo upload fallback and a configurable Google generative image model
+- Server-enforced four-preview quote limits plus Gemini rendering credits with Stripe credit-pack checkout
 - Protected contractor activity dashboard at `/contractor`, including abandoned address starts
 - Optional Meta Pixel and Conversions API tracking
 - One-click Vercel project creation, production deployment, and optional custom-domain attachment
@@ -60,15 +60,16 @@ Branded product presets are disabled by default and provided as editable referen
 
 Generated public company sites hide `/setup`. Before exposing the admin/template deployment to untrusted users, add authentication and persistent company records. The deployment endpoint is protected by `GUTTERQUOTE_DEPLOY_KEY`, but a production multi-tenant platform should also authorize every deployment through signed-in company accounts.
 
-Generated company sites include a protected `/contractor` dashboard. Publishing creates a unique dashboard access key and shows it once; save it in the contractor's password manager. A customer address is recorded only after Google verifies it in the service area and the customer continues, as disclosed below the address form, and expires after `ADMIN_LEAD_RETENTION_DAYS` (30 by default). Contact details appear only after the customer submits them.
+Generated company sites include a protected `/contractor` dashboard. Publishing creates a unique dashboard access key and shows it once; save it in the contractor's password manager. Successful login exchanges that key for a signed, HttpOnly, same-site session cookie, so the key is not retained in browser storage or sent with every dashboard request. A customer address is recorded only after Google verifies it in the service area and the customer continues, as disclosed below the address form, and expires after `ADMIN_LEAD_RETENTION_DAYS` (30 by default). Contact details appear only after the customer submits them.
 
 ## Optional service keys
 
 Copy `.env.example` to `.env.local` and add only the services you plan to use:
 
-- `GOOGLE_MAPS_API_KEY` for Places autocomplete, aerial imagery, precise geocoding, and optional Solar measurements
+- `GOOGLE_MAPS_API_KEY` for Places autocomplete, outdoor Street View metadata/static imagery, aerial imagery, precise geocoding, and optional Solar measurements
 - `PLATFORM_SESSION_SECRET` (at least 32 random characters) for expiring signed address-verification tokens
 - `GOOGLE_GENERATIVE_AI_API_KEY` for gutter color visualization
+- `GEMINI_IMAGE_MODEL` to override the default gutter visualization model
 - `RESEND_API_KEY` and `LEAD_FROM` for lead emails
 - `META_CAPI_ACCESS_TOKEN` and optional `META_TEST_EVENT_CODE` for server-side Meta events
 - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` for address activity and render-credit balances
@@ -89,9 +90,9 @@ The final setup step creates one GitHub repository and one Vercel project per gu
 7. Complete company setup, save the draft, and run at least three addresses through contractor test mode.
 8. Approve the tested configuration, enter unique GitHub and Vercel project names, and select **Create GitHub repository & deploy**.
 
-Configured Google, signing, Resend, Meta, Upstash, and Stripe server credentials are copied to the generated Vercel project as encrypted production variables; they are never committed to GitHub or sent to the browser. `GOOGLE_MAPS_API_KEY` must remain server-only and must never use a `NEXT_PUBLIC_` prefix. Each company configuration's email address is the default lead recipient.
+Configured Google, signing, Resend, Meta, Upstash, and Stripe server credentials are copied to the generated Vercel project as encrypted production variables; they are never committed to GitHub or sent to the browser. `GOOGLE_MAPS_API_KEY` must remain server-only and must never use a `NEXT_PUBLIC_` prefix. Address, aerial, measurement, lead, Street View, rendering, login, and checkout APIs enforce signed sessions, same-origin requests where applicable, and server-side rate limits. Each company configuration's email address is the default lead recipient.
 
-Configure one Stripe webhook on the template/admin deployment at `/api/billing/webhook` and subscribe it to `checkout.session.completed` and `checkout.session.async_payment_succeeded`. The shared Upstash database keeps each generated company isolated under its generated tenant ID. A rendering credit is consumed server-side immediately before a Gemini image request, so browser refreshes cannot reset the paid balance.
+Configure one Stripe webhook on the template/admin deployment at `/api/billing/webhook` and subscribe it to `checkout.session.completed` and `checkout.session.async_payment_succeeded`. The shared Upstash database keeps each generated company isolated under its generated tenant ID. Every verified quote session is limited to four successful previews, and one rendering credit is consumed server-side immediately before a Gemini image request. Failed Gemini calls restore both the quote attempt and paid credit; browser refreshes cannot reset either limit. Contractor preview mode never calls Gemini or consumes a credit.
 
 If a custom domain requires verification, the publish screen displays the DNS record returned by Vercel.
 

@@ -1,5 +1,10 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { sendCapiEvent } from "@/lib/meta-capi"
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sameOrigin,
+} from "@/lib/request-security"
 
 export const runtime = "nodejs"
 
@@ -24,7 +29,21 @@ function readCookie(cookieHeader: string, name: string): string | undefined {
  * an eventId with the browser pixel PageView so Meta collapses them into one.
  * Fire-and-forget: always returns ok so it never affects the page.
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json(
+      { error: "Cross-site tracking requests are not allowed." },
+      { status: 403 },
+    )
+  }
+  const rate = await checkRateLimit({
+    request,
+    scope: "pageview",
+    limit: 120,
+    windowSeconds: 60,
+  })
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfter)
+
   let payload: PageViewPayload = {}
   try {
     payload = (await request.json()) as PageViewPayload

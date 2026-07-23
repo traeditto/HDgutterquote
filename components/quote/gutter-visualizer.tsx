@@ -1,41 +1,53 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import { Loader2, Sparkles, ImageOff, RotateCcw, Home, Satellite } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { Camera, CheckCircle2, ImageOff, Loader2, RotateCcw, Sparkles, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-type Angle = "street" | "satellite"
+type ImageSource = "streetview" | "upload"
+type StreetViewStatus = "checking" | "available" | "unavailable"
 
 interface VisualizeResult {
   before: string
   after: string
-  angle: Angle
+  source: ImageSource
   year?: number
+  quoteRendersRemaining?: number
 }
 
 const MAX_RENDERS = 4
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+const ALLOWED_UPLOAD_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 
 interface GutterVisualizerProps {
-  address: string
-  materialName: string
+  disabled?: boolean
+  quoteSessionId: string
+  addressToken: string
+  productName: string
+  material: string
+  profile: string
+  size: string
   colorName: string
   colorHex: string
-  coords: { lat: number; lon: number } | null
 }
 
 export function GutterVisualizer({
-  address,
-  materialName,
+  disabled = false,
+  quoteSessionId,
+  addressToken,
+  productName,
+  material,
+  profile,
+  size,
   colorName,
   colorHex,
-  coords,
 }: GutterVisualizerProps) {
-  const [angle, setAngle] = useState<Angle>("street")
-  const coordKey = coords ? `${coords.lat.toFixed(6)},${coords.lon.toFixed(6)}` : "address"
-  const cacheKey = `${materialName}::${colorName}::${angle}::${coordKey}`
-  const cache = useRef<Map<string, VisualizeResult>>(new Map())
-
+  const [source, setSource] = useState<ImageSource>("streetview")
+  const [streetViewStatus, setStreetViewStatus] = useState<StreetViewStatus>("checking")
+  const [streetViewMessage, setStreetViewMessage] = useState("")
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadError, setUploadError] = useState("")
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [result, setResult] = useState<VisualizeResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -44,56 +56,155 @@ export function GutterVisualizer({
   const limitReached = rendersLeft <= 0
 
   useEffect(() => {
-    const cached = cache.current.get(cacheKey)
-    if (cached) {
-      setResult(cached)
-      setStatus("done")
-    } else {
-      setResult(null)
-      setStatus("idle")
-    }
+    if (disabled || !quoteSessionId || !addressToken) return
+    const controller = new AbortController()
+    setStreetViewStatus("checking")
+    setStreetViewMessage("")
+    void fetch("/api/visualize-gutters/streetview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: quoteSessionId, addressToken }),
+      signal: controller.signal,
+    }).then(async (response) => {
+      const data = await response.json() as { available?: boolean; error?: string }
+      if (controller.signal.aborted) return
+      if (response.ok && data.available) {
+        setStreetViewStatus("available")
+        return
+      }
+      setStreetViewStatus("unavailable")
+      setSource("upload")
+      setStreetViewMessage(
+        "Street View is unavailable for this property. Upload a clear exterior photo showing the roof edges, gutters, and downspouts.",
+      )
+    }).catch(() => {
+      if (controller.signal.aborted) return
+      setStreetViewStatus("unavailable")
+      setSource("upload")
+      setStreetViewMessage(
+        "Street View could not be loaded. Upload a clear exterior photo showing the roof edges, gutters, and downspouts.",
+      )
+    })
+    return () => controller.abort()
+  }, [addressToken, disabled, quoteSessionId])
+
+  // Never retain a render after any input that affects the requested product
+  // or source image changes.
+  useEffect(() => {
+    setResult(null)
+    setStatus("idle")
     setError(null)
-  }, [cacheKey])
+  }, [source, productName, material, profile, size, colorName, colorHex, uploadFile])
 
   const generate = useCallback(async () => {
+    if (disabled) return
     if (renderCount >= MAX_RENDERS) {
-      setError(
-        `You've used all ${MAX_RENDERS} previews for this quote. Contact us to see more color options.`,
-      )
+      setError(`You've used all ${MAX_RENDERS} previews for this quote. Contact us to see more color options.`)
       setStatus("error")
       return
     }
+    if (source === "streetview" && streetViewStatus !== "available") return
+    if (source === "upload" && !uploadFile) {
+      setError("Upload a clear JPG, PNG, or WebP exterior photo before continuing.")
+      setStatus("error")
+      return
+    }
+
     setStatus("loading")
     setError(null)
+    const form = new FormData()
+    form.set("source", source)
+    form.set("sessionId", quoteSessionId)
+    form.set("addressToken", addressToken)
+    form.set("product", productName)
+    form.set("material", material)
+    form.set("profile", profile)
+    form.set("size", size)
+    form.set("color", colorName)
+    form.set("colorHex", colorHex)
+    if (source === "upload" && uploadFile) form.set("photo", uploadFile)
+
     try {
-      const res = await fetch("/api/visualize-gutters", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address,
-          material: materialName,
-          color: colorName,
-          colorHex,
-          coords,
-          angle,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data?.error ?? "We couldn't generate the preview.")
+      const response = await fetch("/api/visualize-gutters", { method: "POST", body: form })
+      const data = await response.json() as VisualizeResult & {
+        error?: string
+        code?: string
+        quoteRendersRemaining?: number
+      }
+      if (typeof data.quoteRendersRemaining === "number") {
+        setRenderCount(
+          Math.max(
+            0,
+            MAX_RENDERS - Math.min(MAX_RENDERS, data.quoteRendersRemaining),
+          ),
+        )
+      }
+      if (!response.ok) {
+        if (source === "streetview" && data.code === "streetview-unavailable") {
+          setStreetViewStatus("unavailable")
+          setStreetViewMessage(
+            "Street View is unavailable for this property. Upload a clear exterior photo showing the roof edges, gutters, and downspouts.",
+          )
+          setSource("upload")
+        }
+        if (data.code === "quote-render-limit") {
+          setRenderCount(MAX_RENDERS)
+        }
+        setError(data.error ?? "We couldn't generate the preview.")
         setStatus("error")
         return
       }
-      const next: VisualizeResult = data
-      cache.current.set(cacheKey, next)
-      setResult(next)
-      setRenderCount((c) => c + 1)
+      setResult(data)
+      if (typeof data.quoteRendersRemaining !== "number") {
+        setRenderCount((count) => count + 1)
+      }
       setStatus("done")
     } catch {
       setError("Network error while generating the preview.")
       setStatus("error")
     }
-  }, [address, materialName, colorName, colorHex, coords, angle, cacheKey, renderCount])
+  }, [
+    addressToken,
+    colorHex,
+    colorName,
+    disabled,
+    material,
+    productName,
+    profile,
+    quoteSessionId,
+    renderCount,
+    size,
+    source,
+    streetViewStatus,
+    uploadFile,
+  ])
+
+  const buttonLabel = source === "streetview" ? "Preview with Street View" : "Preview with my photo"
+  const canRender = !limitReached && status !== "loading" && (
+    source === "streetview" ? streetViewStatus === "available" : Boolean(uploadFile)
+  )
+
+  if (disabled) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+        <div className="flex items-center gap-2">
+          <Sparkles className="size-5 text-accent" />
+          <div>
+            <h3 className="font-heading text-base font-bold text-foreground">
+              Gutter visualization
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Available on the approved customer site
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950">
+          AI rendering is disabled in contractor preview mode, so testing never
+          calls Gemini or consumes paid rendering credits.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
@@ -101,118 +212,110 @@ export function GutterVisualizer({
         <div className="flex items-center gap-2">
           <Sparkles className="size-5 text-accent" />
           <div>
-            <h3 className="font-heading text-base font-bold text-foreground">
-              See the gutter color on your home
-            </h3>
+            <h3 className="font-heading text-base font-bold text-foreground">See the gutter color on your home</h3>
             <p className="text-xs text-muted-foreground">
-              {materialName} in{" "}
-              <span className="font-medium text-foreground">{colorName}</span>
+              {productName} in <span className="font-medium text-foreground">{colorName}</span>
             </p>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <div
-            className="inline-flex rounded-lg border border-border bg-muted p-0.5"
-            role="group"
-            aria-label="Choose preview angle"
-          >
-            {(
-              [
-                { value: "street", label: "Street", Icon: Home },
-                { value: "satellite", label: "Aerial", Icon: Satellite },
-              ] as const
-            ).map(({ value, label, Icon }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setAngle(value)}
-                aria-pressed={angle === value}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                  angle === value
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="size-3.5" />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {status === "done" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={generate}
-              disabled={limitReached}
-              className="gap-1.5 bg-transparent"
-            >
-              <RotateCcw className="size-3.5" />
-              Regenerate
-            </Button>
-          )}
-        </div>
+        {status === "done" && (
+          <Button variant="outline" size="sm" onClick={generate} disabled={!canRender} className="gap-1.5 bg-transparent">
+            <RotateCcw className="size-3.5" />
+            Regenerate
+          </Button>
+        )}
       </div>
 
-      <div className="relative mt-4 aspect-[4/3] w-full overflow-hidden rounded-xl border border-border bg-muted">
-        {status === "idle" && !limitReached && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="text-pretty text-sm text-muted-foreground">
-              Generate a photorealistic preview showing {colorName} gutters and
-              downspouts on this home.
-            </p>
-            <Button onClick={generate} className="gap-2">
-              <Sparkles className="size-4" />
-              Preview on my home
-            </Button>
-            <p className="text-pretty text-xs text-muted-foreground">
-              If Street View catches the wrong house, switch to Aerial. It uses
-              the confirmed map pin.
-            </p>
-          </div>
-        )}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Choose visualization image source">
+        <SourceOption
+          selected={source === "streetview"}
+          disabled={streetViewStatus === "unavailable"}
+          onSelect={() => setSource("streetview")}
+          icon={Camera}
+          title="Street View — Recommended"
+          description={streetViewStatus === "checking" ? "Checking property imagery…" : "Use Google's outdoor street-level property image."}
+        />
+        <SourceOption
+          selected={source === "upload"}
+          onSelect={() => setSource("upload")}
+          icon={Upload}
+          title="Upload photo — Secondary option"
+          description="Use your own clear exterior property photo."
+        />
+      </div>
 
-        {status === "idle" && limitReached && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-            <ImageOff className="size-6 text-muted-foreground" />
-            <p className="text-pretty text-sm text-muted-foreground">
-              You&apos;ve used all {MAX_RENDERS} previews for this quote.
-            </p>
-          </div>
-        )}
+      {streetViewMessage && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-relaxed text-amber-950">
+          {streetViewMessage}
+        </div>
+      )}
 
+      {source === "upload" && (
+        <label className="mt-4 block rounded-xl border border-dashed border-border bg-muted/35 p-4 text-center">
+          <Upload className="mx-auto size-6 text-muted-foreground" />
+          <span className="mt-2 block text-sm font-semibold text-foreground">Upload a clear exterior photo</span>
+          <span className="mt-1 block text-xs text-muted-foreground">JPG, PNG, or WebP · maximum 8 MB</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+            className="mt-3 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-full file:border-0 file:bg-accent file:px-4 file:py-2 file:font-semibold file:text-accent-foreground"
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null
+              if (!file) {
+                setUploadFile(null)
+                setUploadError("")
+                return
+              }
+              if (!ALLOWED_UPLOAD_TYPES.has(file.type) || file.size > MAX_UPLOAD_BYTES) {
+                setUploadFile(null)
+                setUploadError("Upload a JPG, PNG, or WebP image no larger than 8 MB.")
+                event.target.value = ""
+                return
+              }
+              setUploadError("")
+              setUploadFile(file)
+            }}
+          />
+          {uploadFile && (
+            <span className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <CheckCircle2 className="size-3.5 text-emerald-600" />
+              {uploadFile.name}
+            </span>
+          )}
+        </label>
+      )}
+
+      <div className="mt-4 min-h-44 rounded-xl border border-border bg-muted/30 p-4">
         {status === "loading" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-center">
             <Loader2 className="size-6 animate-spin text-accent" />
-            <p className="text-sm text-muted-foreground">
-              Rendering your home with {colorName} gutters&hellip;
-            </p>
+            <p className="text-sm text-muted-foreground">Rendering your home with {colorName} gutters&hellip;</p>
             <p className="text-xs text-muted-foreground">This can take a few seconds.</p>
           </div>
         )}
 
-        {status === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-            <ImageOff className="size-6 text-muted-foreground" />
-            <p className="text-pretty text-sm text-muted-foreground">{error}</p>
-            <Button variant="outline" size="sm" onClick={generate} className="bg-transparent">
-              Try again
+        {status !== "loading" && status !== "done" && (
+          <div className="flex min-h-36 flex-col items-center justify-center gap-3 px-2 text-center">
+            {status === "error" && <ImageOff className="size-6 text-muted-foreground" />}
+            <p className="max-w-xl text-pretty text-sm text-muted-foreground">
+              {(source === "upload" && uploadError) || error || (source === "streetview"
+                ? "Use the verified property's Street View image for a realistic gutter preview."
+                : "Upload a clear exterior photo that shows the visible roof edges and drainage locations.")}
+            </p>
+            <Button onClick={generate} disabled={!canRender} className="gap-2">
+              <Sparkles className="size-4" />
+              {buttonLabel}
             </Button>
           </div>
         )}
 
-        {status === "done" && result && (
-          <BeforeAfter before={result.before} after={result.after} afterLabel={colorName} />
-        )}
+        {status === "done" && result && <ImageComparison before={result.before} after={result.after} />}
       </div>
 
       {status === "done" && result && (
         <p className="mt-3 text-center text-[11px] leading-relaxed text-muted-foreground">
-          AI-generated visualization from{" "}
-          {result.angle === "street" ? "a street-level" : "an aerial"} photo of your
-          home{result.year ? ` (${result.year})` : ""}. For illustration only.
+          AI-generated visualization from {result.source === "streetview" ? "a Street View" : "your uploaded"} photo
+          {result.year ? ` (${result.year})` : ""}. For illustration only.
         </p>
       )}
 
@@ -227,88 +330,56 @@ export function GutterVisualizer({
   )
 }
 
-function BeforeAfter({
-  before,
-  after,
-  afterLabel,
+function SourceOption({
+  selected,
+  disabled = false,
+  onSelect,
+  icon: Icon,
+  title,
+  description,
 }: {
-  before: string
-  after: string
-  afterLabel: string
+  selected: boolean
+  disabled?: boolean
+  onSelect: () => void
+  icon: typeof Camera
+  title: string
+  description: string
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState(50)
-  const dragging = useRef(false)
-
-  const setFromClientX = useCallback((clientX: number) => {
-    const el = containerRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    const pct = ((clientX - rect.left) / rect.width) * 100
-    setPos(Math.max(0, Math.min(100, pct)))
-  }, [])
-
-  useEffect(() => {
-    const onMove = (e: PointerEvent) => {
-      if (!dragging.current) return
-      setFromClientX(e.clientX)
-    }
-    const onUp = () => {
-      dragging.current = false
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
-    return () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-  }, [setFromClientX])
-
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0 cursor-ew-resize select-none"
-      onPointerDown={(e) => {
-        dragging.current = true
-        setFromClientX(e.clientX)
-      }}
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      disabled={disabled}
+      onClick={onSelect}
+      className={cn(
+        "flex items-start gap-3 rounded-xl border p-4 text-left transition-colors",
+        selected ? "border-accent bg-accent/10 ring-1 ring-accent/30" : "border-border hover:border-accent/50",
+        disabled && "cursor-not-allowed opacity-55",
+      )}
     >
-      <img
-        src={before || "/placeholder.svg"}
-        alt="Your home today"
-        className="pointer-events-none absolute inset-0 size-full object-cover"
-        draggable={false}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-        style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
-      >
-        <img
-          src={after || "/placeholder.svg"}
-          alt={`Your home with ${afterLabel} gutters`}
-          className="size-full object-cover"
-          draggable={false}
-        />
-      </div>
-
-      <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-background/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground">
-        New
+      <Icon className="mt-0.5 size-5 shrink-0 text-accent" />
+      <span>
+        <b className="block text-sm text-foreground">{title}</b>
+        <small className="mt-1 block leading-relaxed text-muted-foreground">{description}</small>
       </span>
-      <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Now
-      </span>
+    </button>
+  )
+}
 
-      <div
-        className="pointer-events-none absolute inset-y-0 w-0.5 bg-background shadow"
-        style={{ left: `${pos}%` }}
-      >
-        <div className="absolute top-1/2 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background bg-accent text-accent-foreground shadow-md">
-          <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="m15 18-6-6 6-6" />
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </div>
-      </div>
+function ImageComparison({ before, after }: { before: string; after: string }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <figure className="overflow-hidden rounded-lg border border-border bg-background">
+        <figcaption className="border-b border-border px-3 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Original</figcaption>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={before} alt="Original property exterior" className="aspect-[4/3] w-full object-cover" />
+      </figure>
+      <figure className="overflow-hidden rounded-lg border border-border bg-background">
+        <figcaption className="border-b border-border px-3 py-2 text-xs font-bold uppercase tracking-wide text-foreground">New gutters</figcaption>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={after} alt="Property with selected new gutters" className="aspect-[4/3] w-full object-cover" />
+      </figure>
     </div>
   )
 }

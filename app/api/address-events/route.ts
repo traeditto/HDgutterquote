@@ -1,12 +1,16 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import {
-  allowPlatformRequest,
   contractorTenantId,
   platformStorageConfigured,
   recordQuoteActivity,
   type QuoteActivityStage,
 } from "@/lib/contractor-platform"
 import { verifyAddressToken } from "@/lib/address-verification"
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sameOrigin,
+} from "@/lib/request-security"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,11 +25,21 @@ const STAGES = new Set<QuoteActivityStage>([
   "quote-viewed",
 ])
 
-export async function POST(request: Request) {
-  const client = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
-  if (!(await allowPlatformRequest("address-events", client, 60, 60))) {
-    return NextResponse.json({ error: "Too many requests." }, { status: 429 })
+export async function POST(request: NextRequest) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json(
+      { error: "Cross-site activity requests are not allowed." },
+      { status: 403 },
+    )
   }
+  const rate = await checkRateLimit({
+    request,
+    scope: "address-events",
+    limit: 60,
+    windowSeconds: 60,
+  })
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfter)
+
   try {
     const body = await request.json()
     const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : ""

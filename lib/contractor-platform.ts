@@ -118,6 +118,68 @@ export async function recordQuoteActivity(input: {
   return true
 }
 
+export async function quoteSessionExists(sessionId: string) {
+  if (!platformStorageConfigured()) return false
+  return Number(
+    await redis(["EXISTS", tenantKey(`activity:${sessionId}`)]),
+  ) === 1
+}
+
+export async function reserveQuoteRenderAttempt(
+  sessionId: string,
+  maximum = 4,
+) {
+  if (!platformStorageConfigured()) {
+    return { ok: false as const, reason: "missing_session" as const }
+  }
+  const safeMaximum = Math.max(1, Math.min(20, Math.floor(maximum)))
+  const script =
+    "if redis.call('EXISTS',KEYS[1])==0 then return -2 end; " +
+    "local c=tonumber(redis.call('GET',KEYS[2]) or '0'); " +
+    "if c>=tonumber(ARGV[1]) then return -1 end; " +
+    "c=redis.call('INCR',KEYS[2]); redis.call('EXPIRE',KEYS[2],ARGV[2]); return c"
+  const used = Number(
+    await redis([
+      "EVAL",
+      script,
+      2,
+      tenantKey(`activity:${sessionId}`),
+      tenantKey(`render-attempts:${sessionId}`),
+      safeMaximum,
+      retentionSeconds(),
+    ]),
+  )
+  if (used === -2) {
+    return { ok: false as const, reason: "missing_session" as const }
+  }
+  if (used === -1) {
+    return {
+      ok: false as const,
+      reason: "quote_limit" as const,
+      remaining: 0,
+    }
+  }
+  return {
+    ok: true as const,
+    remaining: Math.max(0, safeMaximum - used),
+  }
+}
+
+export async function refundQuoteRenderAttempt(sessionId: string) {
+  if (!platformStorageConfigured()) return null
+  const script =
+    "local c=tonumber(redis.call('GET',KEYS[1]) or '0'); " +
+    "if c<=0 then return 0 end; return redis.call('DECR',KEYS[1])"
+  return Number(
+    await redis([
+      "EVAL",
+      script,
+      1,
+      tenantKey(`render-attempts:${sessionId}`),
+    ]),
+  )
+}
+
 export async function listQuoteActivity(limit = 100) {
   if (!platformStorageConfigured()) return [] as QuoteActivity[]
   const indexKey = tenantKey("activity-index")
@@ -159,6 +221,12 @@ export async function consumeRenderCredit() {
   const script = "local c=redis.call('GET',KEYS[1]); if not c then redis.call('SET',KEYS[1],ARGV[1]); c=ARGV[1]; end; if tonumber(c)<=0 then return -1 end; return redis.call('DECR',KEYS[1])"
   const remaining = Number(await redis(["EVAL", script, 1, tenantKey("render-credits"), initialCredits()]))
   return { allowed: remaining >= 0, remaining: Math.max(0, remaining), metered: true }
+}
+
+/** Restore the one credit consumed for a render whose Gemini call failed. */
+export async function refundRenderCredit() {
+  if (!platformStorageConfigured()) return null
+  return Number(await redis(["INCR", tenantKey("render-credits")]))
 }
 
 export async function addRenderCredits(amount: number, tenantId = contractorTenantId()) {

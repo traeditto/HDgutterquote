@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { GutterVisualizer } from "@/components/quote/gutter-visualizer"
 import { useCompanyConfig } from "@/components/company-config-provider"
-import { enabledProducts } from "@/lib/company-config"
+import { enabledProducts, type GutterProductKind } from "@/lib/company-config"
 import {
   billableGutterLength,
   downspoutCount,
@@ -19,6 +19,8 @@ import {
 
 interface MaterialsStepProps {
   address: string
+  quoteSessionId: string
+  addressToken: string
   measurement: RoofMeasurement
   selected: MaterialId | null
   onSelect: (id: MaterialId) => void
@@ -26,12 +28,14 @@ interface MaterialsStepProps {
   onGutterLengthChange: (linearFeet: number | null) => void
   stories: number
   onStoriesChange: (stories: number) => void
-  confirmedCoords: { lat: number; lon: number } | null
+  contractorPreview?: boolean
   onContinue: () => void
 }
 
 export function MaterialsStep({
   address,
+  quoteSessionId,
+  addressToken,
   measurement,
   selected,
   onSelect,
@@ -39,7 +43,7 @@ export function MaterialsStep({
   onGutterLengthChange,
   stories,
   onStoriesChange,
-  confirmedCoords,
+  contractorPreview = false,
   onContinue,
 }: MaterialsStepProps) {
   const config = useCompanyConfig()
@@ -365,14 +369,19 @@ export function MaterialsStep({
             )
           }
           const color = material.colors[colorIndex[material.id] ?? 0]
+          const visualization = visualizationSpecs(material.name, material.kind)
           return (
             <div className="mt-8">
               <GutterVisualizer
-                address={address}
-                materialName={material.name}
+                disabled={contractorPreview}
+                quoteSessionId={quoteSessionId}
+                addressToken={addressToken}
+                productName={material.name}
+                material={visualization.material}
+                profile={visualization.profile}
+                size={visualization.size}
                 colorName={color?.name ?? "Standard finish"}
                 colorHex={color?.hex ?? "#f5f2ea"}
-                coords={confirmedCoords}
               />
             </div>
           )
@@ -390,4 +399,21 @@ export function MaterialsStep({
       </div>
     </div>
   )
+}
+
+function visualizationSpecs(name: string, kind: GutterProductKind) {
+  const size = name.match(/\b\d+(?:\.\d+)?[- ]inch\b/i)?.[0].replace("-", " ") ?? "the selected product size"
+  const material = /aluminum/i.test(name)
+    ? "aluminum"
+    : /steel/i.test(name)
+      ? "steel"
+      : "the material specified by the selected product"
+  const profile = /half[- ]round/i.test(name)
+    ? "half-round"
+    : /leafguard|one[- ]piece|hood/i.test(name)
+      ? "integrated hooded one-piece"
+      : kind === "gutter-with-guard"
+        ? "seamless gutter with the selected guard profile"
+        : "seamless K-style"
+  return { material, profile, size }
 }

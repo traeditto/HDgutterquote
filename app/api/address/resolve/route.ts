@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import {
   DEFAULT_CONFIG,
   IS_DEPLOYED_COMPANY_SITE,
@@ -10,6 +10,11 @@ import {
 import { createAddressToken } from "@/lib/address-verification"
 import { contractorTenantId } from "@/lib/contractor-platform"
 import { resolveGoogleAddress } from "@/lib/google-places"
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sameOrigin,
+} from "@/lib/request-security"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -37,8 +42,22 @@ function previewConfig(body: ResolveBody): CompanyConfig {
   return { ...DEFAULT_CONFIG, state, counties }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    if (!sameOrigin(request)) {
+      return NextResponse.json(
+        { error: "Cross-site address requests are not allowed." },
+        { status: 403 },
+      )
+    }
+    const rate = await checkRateLimit({
+      request,
+      scope: "address-resolve",
+      limit: 30,
+      windowSeconds: 60,
+    })
+    if (!rate.allowed) return rateLimitResponse(rate.retryAfter)
+
     const body = await request.json() as ResolveBody
     const placeId = body.placeId?.trim() || ""
     const sessionToken = body.sessionToken?.trim() || ""

@@ -1,13 +1,45 @@
-import { NextResponse } from "next/server"
-import { contractorTenantId, isContractorAuthorized } from "@/lib/contractor-platform"
+import { NextRequest, NextResponse } from "next/server"
+import {
+  CONTRACTOR_COOKIE,
+  readContractorSession,
+} from "@/lib/contractor-auth"
+import { contractorTenantId } from "@/lib/contractor-platform"
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sameOrigin,
+} from "@/lib/request-security"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function POST(request: Request) {
-  if (!isContractorAuthorized(request.headers.get("x-contractor-access-key"))) {
+export async function POST(request: NextRequest) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json(
+      { error: "Cross-site checkout requests are not allowed." },
+      { status: 403 },
+    )
+  }
+  let sessionTenant: string | null = null
+  try {
+    sessionTenant = readContractorSession(
+      request.cookies.get(CONTRACTOR_COOKIE)?.value,
+    )
+  } catch {
+    sessionTenant = null
+  }
+  if (sessionTenant !== contractorTenantId()) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 })
   }
+  const rate = await checkRateLimit({
+    request,
+    scope: "billing-checkout",
+    identifier: contractorTenantId(),
+    limit: 10,
+    windowSeconds: 600,
+  })
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfter)
+
   const secret = process.env.STRIPE_SECRET_KEY
   const priceId = process.env.STRIPE_RENDER_CREDIT_PRICE_ID
   if (!secret || !priceId) {

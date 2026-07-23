@@ -58,10 +58,14 @@ function pinToLatLon(center: Center, fx: number, fy: number): { lat: number; lon
 
 export function ConfirmStep({
   address,
+  addressToken,
+  sessionId,
   onConfirm,
   onEdit,
 }: {
   address: string
+  addressToken: string
+  sessionId: string
   onConfirm: (coords?: { lat: number; lon: number }) => void
   onEdit: () => void
 }) {
@@ -85,7 +89,13 @@ export function ConfirmStep({
     setFailed(false)
     setPin({ x: 0.5, y: 0.5 })
 
-    fetch(`/api/aerial?address=${encodeURIComponent(address)}&format=json&zoom=${ZOOM}`)
+    const query = new URLSearchParams({
+      sessionId,
+      addressToken,
+      format: "json",
+      zoom: String(ZOOM),
+    })
+    fetch(`/api/aerial?${query}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled) return
@@ -105,7 +115,7 @@ export function ConfirmStep({
     return () => {
       cancelled = true
     }
-  }, [address])
+  }, [address, addressToken, sessionId])
 
   const moved = Math.abs(pin.x - 0.5) > 0.01 || Math.abs(pin.y - 0.5) > 0.01
 
@@ -155,9 +165,19 @@ export function ConfirmStep({
 
   // Draggable path uses a marker-less image centered on the resolved point;
   // fallback path uses the address with the baked-in server pin.
-  const src = center
-    ? `/api/aerial?lat=${center.lat}&lon=${center.lon}&zoom=${ZOOM}&w=${LOGICAL_W}&h=${LOGICAL_H}&pin=off`
-    : `/api/aerial?address=${encodeURIComponent(address)}&zoom=${ZOOM}&w=${LOGICAL_W}&h=${LOGICAL_H}`
+  const imageQuery = new URLSearchParams({
+    sessionId,
+    addressToken,
+    zoom: String(ZOOM),
+    w: String(LOGICAL_W),
+    h: String(LOGICAL_H),
+  })
+  if (center) {
+    imageQuery.set("lat", String(center.lat))
+    imageQuery.set("lon", String(center.lon))
+    imageQuery.set("pin", "off")
+  }
+  const src = `/api/aerial?${imageQuery}`
 
   return (
     <div className="mx-auto max-w-xl text-center">

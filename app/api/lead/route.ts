@@ -1,9 +1,14 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { Resend } from "resend"
 import { sendCapiEvent, splitName } from "@/lib/meta-capi"
 import { DEFAULT_CONFIG } from "@/lib/company-config"
 import { verifyAddressToken } from "@/lib/address-verification"
 import { contractorTenantId, recordQuoteActivity } from "@/lib/contractor-platform"
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sameOrigin,
+} from "@/lib/request-security"
 
 export const runtime = "nodejs"
 
@@ -46,7 +51,14 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;")
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json(
+      { ok: false, error: "cross-site-request" },
+      { status: 403 },
+    )
+  }
+
   let lead: LeadPayload
   try {
     lead = (await request.json()) as LeadPayload
@@ -73,11 +85,32 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   }
+  const rate = await checkRateLimit({
+    request,
+    scope: "lead-save",
+    identifier: `${contractorTenantId()}:${sessionId}`,
+    limit: 12,
+    windowSeconds: 3600,
+  })
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfter)
   const address = verifiedAddress.formattedAddress
 
   if (!name || !phone || !email) {
     return NextResponse.json(
       { ok: false, error: "missing-fields" },
+      { status: 400 },
+    )
+  }
+  if (
+    name.length > 120 ||
+    email.length > 254 ||
+    phone.length > 40 ||
+    (lead.source?.length ?? 0) > 120 ||
+    (lead.eventId?.length ?? 0) > 200 ||
+    (lead.eventSourceUrl?.length ?? 0) > 2_048
+  ) {
+    return NextResponse.json(
+      { ok: false, error: "invalid-fields" },
       { status: 400 },
     )
   }

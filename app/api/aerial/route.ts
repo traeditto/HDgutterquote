@@ -1,4 +1,10 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { verifyAddressToken } from "@/lib/address-verification"
+import { contractorTenantId } from "@/lib/contractor-platform"
+import {
+  checkRateLimit,
+  rateLimitResponse,
+} from "@/lib/request-security"
 import { geocode } from "@/lib/roof-measure-server"
 
 export const runtime = "nodejs"
@@ -6,18 +12,52 @@ export const dynamic = "force-dynamic"
 
 /**
  * Aerial (satellite) image proxy. The browser requests
- * `/api/aerial?lat=..&lon=..` and we fetch a Google Maps Static satellite tile
- * server-side so the API key is never exposed to the client. Returns a PNG.
+ * `/api/aerial` with its verified quote token and we fetch a Google Maps Static
+ * satellite tile server-side so the API key is never exposed to the client.
+ * Returns a PNG.
  *
  * A pin is dropped on the exact coordinates so the customer can confirm the
  * measurement is centered on their house before we run the estimate.
  */
-export async function GET(request: Request) {
-  const params = new URL(request.url).searchParams
-  const zoom = Number(params.get("zoom")) || 20
+export async function GET(request: NextRequest) {
+  const params = request.nextUrl.searchParams
+  const sessionId = params.get("sessionId") || ""
+  const addressToken = params.get("addressToken") || ""
+  if (
+    !/^[a-zA-Z0-9_-]{8,100}$/.test(sessionId) ||
+    addressToken.length < 20 ||
+    addressToken.length > 2_000
+  ) {
+    return NextResponse.json(
+      { error: "A verified property address is required." },
+      { status: 400 },
+    )
+  }
+
+  const verifiedAddress = verifyAddressToken(
+    addressToken,
+    contractorTenantId(),
+    sessionId,
+  )
+  if (!verifiedAddress) {
+    return NextResponse.json(
+      { error: "The verified property address expired." },
+      { status: 401 },
+    )
+  }
+  const rate = await checkRateLimit({
+    request,
+    scope: "aerial",
+    identifier: `${contractorTenantId()}:${sessionId}`,
+    limit: 12,
+    windowSeconds: 3600,
+  })
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfter)
+
+  const zoom = Math.min(21, Math.max(18, Number(params.get("zoom")) || 20))
   // Cap the requested size to keep costs and payloads sane.
-  const width = Math.min(Number(params.get("w")) || 640, 640)
-  const height = Math.min(Number(params.get("h")) || 400, 640)
+  const width = Math.min(640, Math.max(320, Number(params.get("w")) || 640))
+  const height = Math.min(640, Math.max(240, Number(params.get("h")) || 400))
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) {
@@ -31,7 +71,7 @@ export async function GET(request: Request) {
   const lonRaw = params.get("lon")
   const lat = latRaw !== null ? Number(latRaw) : NaN
   const lon = lonRaw !== null ? Number(lonRaw) : NaN
-  const address = params.get("address")?.trim()
+  const address = verifiedAddress.formattedAddress
 
   // Resolve the center the pin sits on. Order of preference (most → least
   // precise), each falling through to the next on a miss:
@@ -103,7 +143,10 @@ export async function GET(request: Request) {
         { status: 404 },
       )
     }
-    return NextResponse.json({ lat: centerLat, lon: centerLon, zoom })
+    return NextResponse.json(
+      { lat: centerLat, lon: centerLon, zoom },
+      { headers: { "Cache-Control": "private, no-store" } },
+    )
   }
 
   // pin=off suppresses the baked-in marker so the client can overlay its own
@@ -122,7 +165,10 @@ export async function GET(request: Request) {
     `&key=${apiKey}`
 
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(8000),
+      cache: "no-store",
+    })
     const contentType = res.headers.get("content-type") ?? ""
     // Static Maps returns a PNG on success; on error it returns text/plain or
     // an HTTP error with a human-readable reason. Surface that for debugging.
@@ -136,8 +182,8 @@ export async function GET(request: Request) {
       status: 200,
       headers: {
         "Content-Type": contentType || "image/png",
-        // Cache per-coordinate image at the edge for a day.
-        "Cache-Control": "public, max-age=86400, s-maxage=86400",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
       },
     })
   } catch (err) {

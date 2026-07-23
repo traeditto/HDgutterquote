@@ -1,16 +1,28 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import {
   measureRoofFromAddress,
   measureRoofFromLatLon,
 } from "@/lib/roof-measure-server"
 import { verifyAddressToken } from "@/lib/address-verification"
 import { contractorTenantId } from "@/lib/contractor-platform"
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sameOrigin,
+} from "@/lib/request-security"
 
 export const runtime = "nodejs"
 // External public GIS/OSM requests vary per address — never cache.
 export const dynamic = "force-dynamic"
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json(
+      { error: "Cross-site measurement requests are not allowed." },
+      { status: 403 },
+    )
+  }
+
   let sessionId = ""
   let addressToken = ""
   let lat = NaN
@@ -26,7 +38,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 })
   }
 
-  const hasCoords = Number.isFinite(lat) && Number.isFinite(lon)
+  const hasCoords =
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lon >= -180 &&
+    lon <= 180
   if (!/^[a-zA-Z0-9_-]{8,100}$/.test(sessionId) || addressToken.length < 20 || addressToken.length > 2_000) {
     return NextResponse.json({ error: "A verified property address is required." }, { status: 400 })
   }
@@ -36,6 +54,15 @@ export async function POST(request: Request) {
     if (!verified) {
       return NextResponse.json({ error: "The verified property address is invalid or expired." }, { status: 400 })
     }
+    const rate = await checkRateLimit({
+      request,
+      scope: "roof-measure",
+      identifier: `${contractorTenantId()}:${sessionId}`,
+      limit: 5,
+      windowSeconds: 3600,
+    })
+    if (!rate.allowed) return rateLimitResponse(rate.retryAfter)
+
     const serviceArea = { state: verified.state, county: verified.county }
     // When the customer has repositioned the pin, measure the corrected point;
     // otherwise measure by address.

@@ -119,10 +119,19 @@ function companyEnvironment(configValue: string) {
     "GOOGLE_MAPS_API_KEY",
     "PLATFORM_SESSION_SECRET",
     "GOOGLE_GENERATIVE_AI_API_KEY",
+    "GEMINI_IMAGE_MODEL",
     "RESEND_API_KEY",
     "LEAD_FROM",
     "META_CAPI_ACCESS_TOKEN",
     "META_TEST_EVENT_CODE",
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_RENDER_CREDIT_PRICE_ID",
+    "RENDER_CREDITS_PER_PACK",
+    "RENDER_INITIAL_CREDITS",
+    "RENDER_MAX_PER_IP_HOUR",
+    "ADMIN_LEAD_RETENTION_DAYS",
   ]) {
     const value = process.env[key]
     if (value) variables.push({ key, value, type: "encrypted", target: "production" })
